@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gnmesh"
+version = "0.1.0"
+description = "Utilities for mesh-based model information, gradients, and transformations"
+readme = "README"
+requires-python = ">=3.10"
+dependencies = [
+	"numpy",
+	"scipy",
+	"matplotlib",
+	"pygimli",
+]
+
+[project.optional-dependencies]
+gpu = [
+	"cupy; platform_system != 'Darwin'",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["gnmesh*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
