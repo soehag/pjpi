@@ -3,4 +3,4 @@ gnmesh.egg-info
 .vscode
 
 example_gn/data
-example_gn/setup_figures
+example_gn/figures
