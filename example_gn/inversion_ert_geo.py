@@ -112,6 +112,7 @@ def main():
         rho_matrix=RHO_MATRIX,
         phi=PHI_RESERVOIR,
         version_fluid_mixtures="brie",
+        output_parameter="slowness",
     )
 
     gassmann_caprock = GassmannTransformation(
@@ -123,6 +124,7 @@ def main():
         rho_matrix=RHO_MATRIX,
         phi=PHI_CAPROCK,
         version_fluid_mixtures="brie",
+        output_parameter="slowness",
     )
 
     archie_reservoir = ArchieTransformation(
@@ -275,6 +277,13 @@ def main():
     C_MIN_RES = RESISTIVITY_MIN
     C_MAX_RES = RESISTIVITY_MAX
     REL_RESIDUAL_RES_CMAX = 0.15
+
+    C_MIN_VP = VELOCITY_MIN
+    C_MAX_VP = VELOCITY_MAX
+    REL_RESIDUAL_TT_CMAX = 0.05
+
+    C_MIN_SAT = SATURATION_MIN
+    C_MAX_SAT = SATURATION_MAX
 
     # %% Define function to conduct inversion and save results
 
@@ -464,9 +473,10 @@ def main():
                 cMap="turbo",
                 cMin=0.0,
                 cMax=REL_RESIDUAL_RES_CMAX,
-                figsize=(20, 10),
+                figsize=(20, 5),
                 layout='constrained',
             )
+            fig.suptitle(f"Relative residuals by offset for ERT geo inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
             if save:
                 fig.savefig(str(path_figures_results.joinpath(f"final_residual.png").absolute()))
                 plt.close(fig)
