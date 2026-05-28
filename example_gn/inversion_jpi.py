@@ -50,10 +50,10 @@ def main():
     path_home = Path(__file__).resolve().parent
     path_data_home = path_home / "data"
     path_data_synthetic = path_data_home / "synthetic"
-    path_data_results = path_data_home / "results_tt_petro"
+    path_data_results = path_data_home / "results_jpi"
 
     path_figures_home = path_home / "figures"
-    path_figures_results = path_figures_home / "figures_tt_petro"
+    path_figures_results = path_figures_home / "figures_jpi"
 
     path_data_results.mkdir(parents=True, exist_ok=True)
     path_figures_results.mkdir(parents=True, exist_ok=True)
@@ -288,9 +288,10 @@ def main():
 
     # %% Define function to conduct inversion and save results
 
+    tt_normalisation = np.mean(ert_data["rhoa"])/np.mean(tt_data["t"])
+
     def run_tt_petro_inversion(
-        smoothing_para,
-        damping_para,
+        tt_weight,
         mesh_info_inversion_mesh=meshinfo_inversion,
         maximum_iterations=MAXIMUM_ITERATIONS,
         max_update_per_step=(-MAX_SATURATION_UPDATE_PER_STEP,MAX_SATURATION_UPDATE_PER_STEP),
@@ -311,7 +312,7 @@ def main():
         Returns
         - `(geophysical_manager, results_dict)` tuple on success.
         """
-        results_dict_path = path_data_results.joinpath(f"results.json")
+        results_dict_path = path_data_results.joinpath(f"results_ttweight_{tt_weight}.json")
         inversion_mesh=mesh_info_inversion_mesh.mesh
         if results_dict_path.exists() and not force_recalculate:
             #* Load results
@@ -319,17 +320,18 @@ def main():
                 result_dict = json.load(f)
             logger.info("Results loaded from %s", results_dict_path)
             #* Load final model
-            final_mesh_with_model_tt_petro = pg.load(str(path_data_results.joinpath(f"final_model.bms").absolute()))
+            final_mesh_with_model_jpi = pg.load(str(path_data_results.joinpath(f"final_model_ttweight_{tt_weight}.bms").absolute()))
             #* Load final response
-            final_response_tt_petro = tt.load(str(path_data_results.joinpath(f"final_response.data").absolute()))
+            final_response_ert_jpi = tt.load(str(path_data_results.joinpath(f"final_response_ert_ttweight_{tt_weight}.data").absolute()))
+            final_response_tt_jpi = tt.load(str(path_data_results.joinpath(f"final_response_tt_ttweight_{tt_weight}.data").absolute()))
             #* Manager set to none
-            petrophysical_tt_inversion = None
+            petrophysical_jpi_inversion = None
 
         elif not results_dict_path.exists() or force_recalculate:
             logger.info("Invert on mesh with layer and decouple regularisation")
             decoupled_argument = (decoupled_region_vector, [(1,2)])
 
-            model_transformation_petro_tt = mths.transformation.LogarithmicBarrierTransformationTwoSided(
+            model_transformation_jpi = mths.transformation.LogarithmicBarrierTransformationTwoSided(
                 lower_barrier = SATURATION_MIN,
                 upper_barrier = SATURATION_MAX,
             )
@@ -337,79 +339,116 @@ def main():
             initial_model_petro_tt = mths.modelinfo.ModelInfo(
                 model=initial_model_vector_saturation,
                 mesh_info=mesh_info_inversion_mesh,
-                transformation=model_transformation_petro_tt,
+                transformation=model_transformation_jpi,
             )
 
             petrophysical_data_tt = pd.physics_and_data_petrophysical(
                 manager_and_transformation_list=[
+                    (ert.ERTManager(), archie_reservoir),
                     (tt.TravelTimeManager(), gassmann_reservoir),
                 ],
-                data_container_list=[tt_data],
-                data_observed_field_name_list=["t"],
+                data_container_list=[
+                    ert_data,
+                    tt_data
+                ],
+                data_observed_field_name_list=[
+                    "rhoa",
+                    "t"
+                ],
             )
 
-            smoothing_tt = smoothing_operator()
-            damping_tt = damping_operator()
+            smoothing_jpi = smoothing_operator()
+            damping_jpi = damping_operator()
 
-            smoothing_tt.weight=smoothing_para
-            damping_tt.weight=damping_para
+            # Regularisation paramters are retrieved as a combination of the respective weights for the separate inversions.
 
-            petrophysical_tt_inversion = pp.GaussNewtonPetrophysical(
+            ert_smoothing_weight = 1e0
+            ert_damping_weight = 5e-1
+            tt_smoothing_weight = 5e-3
+            tt_damping_weight = 5e-3
+
+            smoothing_para = np.sqrt(1 * ert_smoothing_weight**2 + tt_normalisation * tt_weight * tt_smoothing_weight**2)
+            damping_para = np.sqrt(1 * ert_damping_weight**2 + tt_normalisation * tt_weight * tt_damping_weight**2)
+
+            smoothing_jpi.weight=smoothing_para
+            damping_jpi.weight=damping_para
+
+            petrophysical_jpi_inversion = pp.GaussNewtonPetrophysical(
                 mesh_info=mesh_info_inversion_mesh,
                 petrophysical_data=petrophysical_data_tt,
                 initial_model=initial_model_petro_tt,
-                model_regularisation=[smoothing_tt, damping_tt],
+                model_regularisation=[smoothing_jpi, damping_jpi],
                 decouple_regularisation=decoupled_argument,
                 maximum_iterations=maximum_iterations,
                 verbose=True,
             )
-            petrophysical_tt_inversion.maximum_update_per_step = max_update_per_step
-            petrophysical_tt_inversion.terminate_on_chi2_decrease = 0.01
-            petrophysical_tt_inversion.num_solver = "scipy_sparse"
-            petrophysical_tt_inversion.run()
+            petrophysical_jpi_inversion.maximum_update_per_step = max_update_per_step
+            petrophysical_jpi_inversion.terminate_on_chi2_decrease = 0.01
+            petrophysical_jpi_inversion.num_solver = "scipy_sparse"
+            # Set weight for the datasets - the physics and data object does not have data weights. Weights are managed by the inversion manager, so we set them here.
+            petrophysical_jpi_inversion._data_weight_list=[1e0, tt_weight * tt_normalisation]
+            petrophysical_jpi_inversion.run()
 
             #* Prepare final model
-            final_mesh_with_model_tt_petro = inversion_mesh.copy()
-            final_mesh_with_model_tt_petro["sat"] = petrophysical_tt_inversion.current_model.model
-            final_mesh_with_model_tt_petro["vp"] = 1/gassmann_reservoir.forward(petrophysical_tt_inversion.current_model.model)
+            final_mesh_with_model_jpi = inversion_mesh.copy()
+            final_mesh_with_model_jpi["sat"] = petrophysical_jpi_inversion.current_model.model
+            final_mesh_with_model_jpi["res"] = archie_reservoir.forward(petrophysical_jpi_inversion.current_model.model)
+            final_mesh_with_model_jpi["vp"] = 1/gassmann_reservoir.forward(petrophysical_jpi_inversion.current_model.model)
+
+            ert_man_final = ert.ERTManager()
+            ert_man_final.setMesh(mesh=inversion_mesh)
+            ert_man_final.setData(data=ert_data)
 
             tt_man_final = tt.TravelTimeManager()
             tt_man_final.setMesh(mesh=inversion_mesh)
             tt_man_final.setData(data=tt_data)
+
+            final_response_ert_jpi_vector = ert_man_final.fop.response(final_mesh_with_model_jpi["res"])
+            final_response_ert_jpi = ert_data.copy()
+            final_response_ert_jpi["rhoa"] = final_response_ert_jpi_vector
             
-            final_response_tt_petro_vector = tt_man_final.fop.response(1/final_mesh_with_model_tt_petro["vp"])
-            final_response_tt_petro = tt_data.copy()
-            final_response_tt_petro["t"] = final_response_tt_petro_vector
+            final_response_tt_jpi_vector = tt_man_final.fop.response(1/final_mesh_with_model_jpi["vp"])
+            final_response_tt_jpi = tt_data.copy()
+            final_response_tt_jpi["t"] = final_response_tt_jpi_vector
 
-            rel_error_tt_petro = np.linalg.norm(np.array(tt_data["t"])-np.array(final_response_tt_petro["t"]))/np.linalg.norm(np.array(tt_data["t"]))
-            chi2_tt_petro = ph.data_to_chi_squared(tt_data, final_response_tt_petro, "t")
+            rel_error_ert_jpi = np.linalg.norm(np.array(ert_data["rhoa"])-np.array(final_response_ert_jpi["rhoa"]))/np.linalg.norm(np.array(ert_data["rhoa"]))
+            chi2_ert_jpi = ph.data_to_chi_squared(ert_data, final_response_ert_jpi, "rhoa")
 
-            logger.info("Relative error: %s for smoothing %s and damping %s", rel_error_tt_petro, smoothing_para, damping_para)
-            logger.info("Chi squared: %s for smoothing %s and damping %s", chi2_tt_petro, smoothing_para, damping_para)
+            logger.info("ERT: Relative error: %s for smoothing %s and damping %s", rel_error_ert_jpi, smoothing_para, damping_para)
+            logger.info("ERT: Chi squared: %s for smoothing %s and damping %s", chi2_ert_jpi, smoothing_para, damping_para)
 
-            data_misfit = [petrophysical_tt_inversion.tracking_dict[iteration]["data_misfit"] for iteration in range(0, petrophysical_tt_inversion.maximum_iterations+1)]
+            rel_error_tt_jpi = np.linalg.norm(np.array(tt_data["t"])-np.array(final_response_tt_jpi["t"]))/np.linalg.norm(np.array(tt_data["t"]))
+            chi2_tt_jpi = ph.data_to_chi_squared(tt_data, final_response_tt_jpi, "t")
+
+            logger.info("TT: Relative error: %s for smoothing %s and damping %s", rel_error_tt_jpi, smoothing_para, damping_para)
+            logger.info("TT: Chi squared: %s for smoothing %s and damping %s", chi2_tt_jpi, smoothing_para, damping_para)
+
+            data_misfit = [petrophysical_jpi_inversion.tracking_dict[iteration]["data_misfit"] for iteration in range(0, petrophysical_jpi_inversion.maximum_iterations+1)]
             chi_squared_history = [
-                petrophysical_tt_inversion.tracking_dict[iteration]["chi_squared"] for iteration in range(0, petrophysical_tt_inversion.maximum_iterations+1)
+                petrophysical_jpi_inversion.tracking_dict[iteration]["chi_squared"] for iteration in range(0, petrophysical_jpi_inversion.maximum_iterations+1)
             ]
-            single_model_regularisation_misfit = [petrophysical_tt_inversion.tracking_dict[iteration]["single_model_regularisation_misfit"] for iteration in range(0, petrophysical_tt_inversion.maximum_iterations+1)]
+            single_model_regularisation_misfit = [petrophysical_jpi_inversion.tracking_dict[iteration]["single_model_regularisation_misfit"] for iteration in range(0, petrophysical_jpi_inversion.maximum_iterations+1)]
 
             if save:
-                final_response_tt_petro.save(str(path_data_results.joinpath(f"final_response.data").absolute()))
-                final_mesh_with_model_tt_petro.save(
+                final_response_ert_jpi.save(str(path_data_results.joinpath(f"final_response_ert_ttweight_{tt_weight}.data").absolute()))
+                final_response_tt_jpi.save(str(path_data_results.joinpath(f"final_response_tt_ttweight_{tt_weight}.data").absolute()))
+                final_mesh_with_model_jpi.save(
                     str(path_data_results.joinpath(
-                    f"final_model.bms"
+                    f"final_model_ttweight_{tt_weight}.bms"
                     ).absolute())
                     )
 
             result_dict = {
-                "inversion_name": "tt_petro",
+                "inversion_name": "jpi",
                 "inversion_domain": "petro",
                 "joint_inversion": False,
-                "rel_error_tt": rel_error_tt_petro,
-                "final_chi2_tt": chi2_tt_petro,
-                "smoothing_tt": smoothing_para,
-                "damping_tt": damping_para,
-                "iterations": petrophysical_tt_inversion.maximum_iterations,
+                "rel_error_ert": rel_error_ert_jpi,
+                "rel_error_tt": rel_error_tt_jpi,
+                "final_chi2_ert": chi2_ert_jpi,
+                "final_chi2_tt": chi2_tt_jpi,
+                "smoothing": smoothing_para,
+                "damping": damping_para,
+                "iterations": petrophysical_jpi_inversion.maximum_iterations,
                 "data_misfit": data_misfit,
                 "chi_squared_history": chi_squared_history,
                 "single_model_regularisation_misfit": single_model_regularisation_misfit,
@@ -428,11 +467,13 @@ def main():
         #* Plotting results
         if plot:
             #* Plot final models
-            fig, axs = plt.subplots(1, 4, figsize=(15, 8), layout="constrained")
+            fig, axs = plt.subplots(1, 6, figsize=(25, 8), layout="constrained")
             _=pg.show(original_mesh_w_models, data="sat", cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[0], label="Saturation")
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_tt_petro["sat"], cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[1], label="Saturation")
-            _=pg.show(original_mesh_w_models, data="vp", cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[2], label="Velocity")
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_tt_petro["vp"], cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[3], label="Velocity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_jpi["sat"], cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[1], label="Saturation")
+            _=pg.show(original_mesh_w_models, data="res", cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[2], label="Resistivity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_jpi["res"], cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[3], label="Resistivity")
+            _=pg.show(original_mesh_w_models, data="vp", cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[4], label="Velocity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_jpi["vp"], cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[5], label="Velocity")
 
             for ax in axs:
                 ax.set_xlabel("X (m)")
@@ -442,12 +483,14 @@ def main():
                 plot_boreholes_on_mesh(ax)
 
             axs[0].set_title("Original model saturation")
-            axs[1].set_title(f"Final model saturation TT petro inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
-            axs[2].set_title("Original model velocity")
-            axs[3].set_title(f"Final model velocity TT petro inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
+            axs[1].set_title(f"Final saturation model JPI with TT weight {tt_weight}")
+            axs[2].set_title("Original model resistivity")
+            axs[3].set_title(f"Final resistivity model JPI with TT weight {tt_weight}")
+            axs[4].set_title("Original model velocity")
+            axs[5].set_title(f"Final velocity model JPI with TT weight {tt_weight}")
             if save:
                 fig.savefig(
-                    str(path_figures_results.joinpath(f"final_models.jpg").absolute()),
+                    str(path_figures_results.joinpath(f"final_models_ttweight_{tt_weight}.jpg").absolute()),
                     format='jpg',
                     dpi=300,
                     bbox_inches='tight'
@@ -465,36 +508,53 @@ def main():
             ax.set_yscale("log")
             if save:
                 fig.savefig(
-                    str(path_figures_results.joinpath(f"misfit_history.jpg").absolute()),
+                    str(path_figures_results.joinpath(f"misfit_history_ttweight_{tt_weight}.jpg").absolute()),
                     format='jpg',
                     dpi=300,
                     bbox_inches='tight'
                 )
                 plt.close(fig)
 
-            #* Plot final misfits
-            #* Plot final misfits
-            residual_container = tt_data.copy()
-            residual_container["t"] = np.abs(final_response_tt_petro["t"] - tt_data["t"]) / np.abs(tt_data["t"])
+            #* Plot final misfits - TT
+            residual_container_ert = ert_data.copy()
+            residual_container_ert["rhoa"] = np.abs(final_response_ert_jpi["rhoa"] - ert_data["rhoa"]) / np.abs(ert_data["rhoa"])
+            data_matrices, offsets = ph.gather_datamatrices_by_offset(residual_container_ert)
+            fig, axs = ph.plot_datamatrices_by_offset(
+                data_matrices=data_matrices[3:],
+                offsets=offsets[3:],
+                cMap="turbo",
+                cMin=0.0,
+                cMax=REL_RESIDUAL_RES_CMAX,
+                figsize=(20, 5),
+                layout='constrained',
+            )
+            fig.suptitle(f"Relative residuals by offset for ERT petro inversion with TT weight {tt_weight}")
+            if save:
+                fig.savefig(str(path_figures_results.joinpath(f"final_residual_ert_ttweight_{tt_weight}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
+                plt.close(fig)
+
+            #* Plot final misfits - TT
+            residual_container_tt = tt_data.copy()
+            residual_container_tt["t"] = np.abs(final_response_tt_jpi["t"] - tt_data["t"]) / np.abs(tt_data["t"])
             fig, ax = ph.plot_apparent_velocities_from_data(
-                data_tt = residual_container,
+                data_tt = residual_container_tt,
                 field="t",
                 cMin=0.0,
                 cMax=REL_RESIDUAL_TT_CMAX,
                 cMap="turbo",
             )
-            ax.set_title("Relative residuals TT petro inversion")
+            ax.set_title(f"Relative residuals TT JPI inversion with TT weight {tt_weight}")
             if save:
-                fig.savefig(str(path_figures_results.joinpath(f"final_residual.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
+                fig.savefig(str(path_figures_results.joinpath(f"final_residual_tt_ttweight_{tt_weight}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
 
-            return petrophysical_tt_inversion, result_dict
+            return petrophysical_jpi_inversion, result_dict
 
     # Run a default inversion when invoked as a script.
-    run_tt_petro_inversion(
-        smoothing_para=5e-3,
-        damping_para=5e-3,
-    )
+    for tt_weight in [.1, 1, 10]:
+        run_tt_petro_inversion(
+            tt_weight=tt_weight
+        )
 
 
 if __name__ == "__main__":

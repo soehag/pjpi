@@ -428,10 +428,10 @@ def main():
         if plot:
             #* Plot final models
             fig, axs = plt.subplots(1, 4, figsize=(15, 8), layout="constrained")
-            _=pg.show(original_mesh_w_models, data="sat", cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[0])
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_ert_petro["sat"], cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[1])
-            _=pg.show(original_mesh_w_models, data="res", cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[2])
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_ert_petro["res"], cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[3])
+            _=pg.show(original_mesh_w_models, data="sat", cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[0], label="Saturation")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_ert_petro["sat"], cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[1], label="Saturation")
+            _=pg.show(original_mesh_w_models, data="res", cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[2], label="Resistivity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_ert_petro["res"], cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[3], label="Resistivity")
 
             for ax in axs:
                 ax.set_xlabel("X (m)")
@@ -486,7 +486,7 @@ def main():
             )
             fig.suptitle(f"Relative residuals by offset for ERT petro inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
             if save:
-                fig.savefig(str(path_figures_results.joinpath(f"final_residual.png").absolute()))
+                fig.savefig(str(path_figures_results.joinpath(f"final_residual.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
 
             return petrophysical_ert_inversion, result_dict

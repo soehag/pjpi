@@ -425,8 +425,8 @@ def main():
         if plot:
             #* Plot final models
             fig, axs = plt.subplots(1, 2, figsize=(10, 8), layout="constrained")
-            _=pg.show(original_mesh_w_models, data="vp", cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[0])
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_tt_geo["vp"], cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[1])
+            _=pg.show(original_mesh_w_models, data="vp", cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[0], label="Velocity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_tt_geo["vp"], cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[1], label="Velocity")
 
             for ax in axs:
                 ax.set_xlabel("X (m)")
@@ -476,7 +476,7 @@ def main():
             )
             ax.set_title("Relative residuals TT geo inversion")
             if save:
-                fig.savefig(str(path_figures_results.joinpath(f"final_residual.png").absolute()))
+                fig.savefig(str(path_figures_results.joinpath(f"final_residual.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
 
             return geophysical_tt_inversion, result_dict

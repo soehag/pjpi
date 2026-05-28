@@ -209,9 +209,9 @@ def plot_misfits_from_results_dict(results_dict, data_misfit="chi_squared", fiel
     if "data" in fields_to_plot:
         try:
             for i in range(number_of_methods):
-                data_label = f"{data_label} for Method {i}" if number_of_methods > 1 else data_label
+                data_label_temp = f"{data_label} for Method {i}" if number_of_methods > 1 else data_label
                 data_misfit_temp = [misfit[i] for misfit in results_dict[data_error_tag]]
-                ax.plot(iterations, data_misfit_temp, label=data_label)
+                ax.plot(iterations, data_misfit_temp, label=data_label_temp)
         except Exception as e:
             print(e)
             print("Data misfit not available")
