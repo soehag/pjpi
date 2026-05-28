@@ -34,11 +34,15 @@ matplotlib.use("Agg")
 #* Set up folder structure
 
 path_home = Path(__file__).resolve().parent
-path_data = path_home / "data"
-setup_figures = path_home / "setup_figures"
+path_data_home = path_home / "data"
+path_data_synthetic = path_data_home / "synthetic"
+path_figures_home = path_home / "figures"
+setup_figures = path_figures_home / "figures_setup"
 
 path_home.mkdir(parents=True, exist_ok=True)
-path_data.mkdir(parents=True, exist_ok=True)
+path_data_home.mkdir(parents=True, exist_ok=True)
+path_data_synthetic.mkdir(parents=True, exist_ok=True)
+path_figures_home.mkdir(parents=True, exist_ok=True)
 setup_figures.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
@@ -662,7 +666,7 @@ fig.savefig(setup_figures / "k_factor_mesh.jpg", format='jpg', dpi=300, bbox_inc
 print("there")
 ert_scheme["k"]=ert.createGeometricFactors(ert_scheme, numerical=True, mesh=k_factor_mesh, verbose=True)
 
-ert_scheme.save(str(path_data / "ert_scheme.dat"))
+ert_scheme.save(str(path_data_synthetic / "ert_scheme.data"))
 
 # %% [markdown]
 ##  TT scheme
@@ -701,7 +705,7 @@ tt_scheme["valid"] = np.ones_like(source_indices_long)
 tt_scheme.registerSensorIndex("s")
 tt_scheme.registerSensorIndex("g")
 
-tt_scheme.save(str(path_data / "tt_scheme.dat"))
+tt_scheme.save(str(path_data_synthetic / "tt_scheme.data"))
 
 # %% [markdown]
 ##  Plot acquisition geometry
@@ -949,7 +953,7 @@ fig.savefig(setup_figures / "archie_transformation.jpg", format='jpg', dpi=300, 
 final_mesh = mt.createMesh(domain_with_co2_plume_and_sensors, area=10, quality=33)
 final_mesh, _ = add_boundary_mesh(final_mesh)
 
-final_mesh.save(str(path_data / "final_mesh_wo_models.mesh"))
+final_mesh.save(str(path_data_synthetic / "final_mesh_wo_models"))
 
 # %% Create transformations for reservoir and caprock
 PHI_RESERVOIR = 0.28
@@ -1051,7 +1055,7 @@ parse_mesh_to_resistivity_model(
     saturation_co2plume=SATURATION_CO2,
 )
 
-final_mesh_with_models.save(str(path_data / "final_mesh_with_models.mesh"))
+final_mesh_with_models.save(str(path_data_synthetic / "final_mesh_with_models"))
 
 CMIN_SATURATION = 0.0
 CMAX_SATURATION = 0.55
@@ -1108,17 +1112,17 @@ for rel_noise in [0.0, 0.03]:
     print(f"Creating data for case {data_dongle}")
     ert_data = ert.simulate(mesh=final_mesh_with_models, scheme=ert_scheme, res=final_mesh_with_models["res"], verbose=True, noiseLevel=rel_noise, noiseAbs=0.0, seed=1337)
     ert_data["err"] = rel_noise
-    ert_data.save(str(path_data.joinpath(f"ert_measurement_{data_dongle}.data")))
+    ert_data.save(str(path_data_synthetic.joinpath(f"ert_measurement_{data_dongle}.data")))
         
     #* Simulate TT data
     tt_data = tt.simulate(mesh=final_mesh_with_models, scheme=tt_scheme, vel=final_mesh_with_models["vp"], verbose=True, noiseLevel=rel_noise, noiseAbs=0.0, seed=1337)
     tt_data["err"] = rel_noise
-    tt_data.save(str(path_data.joinpath(f"tt_measurement_{data_dongle}.data")))
+    tt_data.save(str(path_data_synthetic.joinpath(f"tt_measurement_{data_dongle}.data")))
 
 # %% Plot simulated data for one of the noiseless datasets
 # Load data
-tt_data_noiseless = tt.load(str(path_data.joinpath("tt_measurement_noise_3.data")))
-ert_data_noiseless = ert.load(str(path_data.joinpath("ert_measurement_noise_3.data")))
+tt_data_noiseless = tt.load(str(path_data_synthetic.joinpath("tt_measurement_noise_3.data")))
+ert_data_noiseless = ert.load(str(path_data_synthetic.joinpath("ert_measurement_noise_3.data")))
 
 fig, axs = plot_apparent_velocities_from_data(tt_data_noiseless, cMin=2.6e3, cMax=3.5e3)
 fig.savefig(setup_figures / "tt_apparent_velocities.jpg", format='jpg', dpi=300, bbox_inches='tight')
@@ -1188,4 +1192,4 @@ ax.scatter(
 ax.legend()
 
 fig.savefig(setup_figures / "inversion_mesh.jpg", format='jpg', dpi=300, bbox_inches='tight')
-inversion_mesh.save(str(path_data / "inversion_mesh.mesh"))
+inversion_mesh.save(str(path_data_synthetic / "inversion_mesh"))

@@ -159,3 +159,127 @@ def plot_apparent_velocities_from_data(data_tt, ax=None, field="v", cMap="turbo"
     _=ax.set_ylabel("Sources")
     fig.colorbar(im, ax=ax, shrink=0.5, aspect=5)
     return fig, ax
+
+def data_to_chi_squared(observed, simulated, data_field, err_field="err", regu=1e-6):
+    """
+    Compute the chi-squared value for a given data set.
+
+    Parameters:
+    - observed: numpy.ndarray, the observed data.
+    - simulated: numpy.ndarray, the simulated data.
+    - data_field: str, the name of the data field.
+    - err_field: str, the name of the error field.
+    - regu: float, the regularization parameter.
+
+    Returns:
+    - chi_squared: float, the computed chi-squared value.
+    """
+    err = np.array(observed[err_field])
+    observed = np.array(observed[data_field])
+    simulated = np.array(simulated[data_field])
+    if np.any(err == 0):
+        print("Error field contains zero values")
+    err[err == 0] = regu
+    chi_squared = np.sum(((simulated - observed) / (err*observed)) ** 2)
+    chi_squared /= observed.size
+    return chi_squared
+
+def plot_misfits_from_results_dict(results_dict, data_misfit="chi_squared", fields_to_plot=None):
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+    iterations = np.arange(0, results_dict["iterations"]+1)+1
+    print("Found iterations: ", iterations)
+
+    number_of_methods = len(results_dict["data_misfit"][0])
+    print("Number of methods: ", number_of_methods)
+
+    if fields_to_plot is None:
+        fields_to_plot = ["data", "single", "double"]
+    print("Fields to plot: ", fields_to_plot)
+
+    assert data_misfit in ["data", "chi_squared"], "Data misfit must be either 'data' or 'chi_squared'"
+    if data_misfit == "data":
+        data_error_tag = "data_misfit"
+        data_label = "Data misfit"
+    elif data_misfit == "chi_squared":
+        data_error_tag = "chi_squared_history"
+        data_label = "Chi^2"
+    else:
+        raise ValueError("Data misfit must be either 'data' or 'chi_squared'")
+
+    if "data" in fields_to_plot:
+        try:
+            for i in range(number_of_methods):
+                data_label = f"{data_label} for Method {i}" if number_of_methods > 1 else data_label
+                data_misfit_temp = [misfit[i] for misfit in results_dict[data_error_tag]]
+                ax.plot(iterations, data_misfit_temp, label=data_label)
+        except Exception as e:
+            print(e)
+            print("Data misfit not available")
+
+    if "single" in fields_to_plot:
+        try:
+            ax.plot(iterations, results_dict["single_model_regularisation_misfit"], label="Single model regularisation misfit", color="green")
+        except Exception as e:
+            print(e)
+            print("Single model regularisation misfit not available")
+
+    if "dual" in fields_to_plot:
+        try:
+            ax2 = ax.twinx()
+            ax2.plot(iterations, results_dict["dual_model_regularisation_misfit"], label="Dual model regularisation misfit", color="red")
+            ax2.set_ylabel("Misfit of XG-term")
+            ax2.legend()
+        except Exception as e:
+            print(e)
+            print("Joint model regularisation misfit not available")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Misfit")
+    ax.set_title("Misfit history")
+    ax.legend()
+    return fig, ax
+
+def apparent_velocity_from_data(data_tt):
+    """
+    Get the apparent velocities from the data.
+
+    Parameters
+    ----------
+    data : pygimli.core._pygimli_.DataContainer
+        Data to plot.
+
+    Returns
+    -------
+    apparent_velocities : np.array
+        Apparent velocities.
+    
+    distances : np.array
+        Distances.
+
+    traveltimes : np.array
+        Travel times.
+    """
+
+    sensor_positions = np.array(data_tt.sensorPositions()[:,:2])
+
+    distance_matrix = sP.spatial.distance_matrix(sensor_positions, sensor_positions)
+
+    sources = np.array(data_tt["s"])
+    geophones = np.array(data_tt["g"])
+
+    minimum_source_index = np.min(sources)
+    minimum_geophone_index = np.min(geophones)
+
+    i_vector = sources - minimum_source_index
+    j_vector = geophones - minimum_geophone_index
+
+    apparent_velocities = np.zeros((len(np.unique(sources)), len(np.unique(geophones))))
+    distances = np.zeros((len(np.unique(sources)), len(np.unique(geophones))))
+    traveltimes = np.zeros((len(np.unique(sources)), len(np.unique(geophones))))
+
+    distance_vector = distance_matrix[sources, geophones]
+
+    apparent_velocities[i_vector, j_vector] = distance_vector / data_tt["t"]
+    distances[i_vector, j_vector] = distance_vector
+    traveltimes[i_vector, j_vector] = data_tt["t"]
+
+    return apparent_velocities, distances, traveltimes
