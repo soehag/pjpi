@@ -65,7 +65,7 @@ def parse_mesh_to_saturation_model(
             raise ValueError("Unknown marker")
     
     if overwrite:
-        mesh.addData("saturation", saturation_model)
+        mesh.addData("sat", saturation_model)
     return saturation_model
 
 def parse_mesh_to_resistivity_model(
@@ -109,7 +109,7 @@ def parse_mesh_to_resistivity_model(
     """
 
     # First add saturation model to mesh if not already present
-    if not "saturation" in mesh.dataKeys():
+    if not "sat" in mesh.dataKeys():
         saturation_model = parse_mesh_to_saturation_model(
             mesh=mesh,
             saturation_caprock=saturation_caprock,
@@ -121,7 +121,7 @@ def parse_mesh_to_resistivity_model(
             overwrite=overwrite
         )
     else:
-        saturation_model = mesh["saturation"]
+        saturation_model = mesh["sat"]
         print("Saturation available in mesh - skipping saturation parsing")
     
     n_cells = mesh.cellCount()

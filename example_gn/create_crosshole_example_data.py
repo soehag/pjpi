@@ -1067,7 +1067,7 @@ CMAX_VP = 3.5e3
 fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 _ = pg.show(
     mesh=final_mesh_with_models,
-    data=final_mesh_with_models["saturation"],
+    data=final_mesh_with_models["sat"],
     label="Saturation",
     ax=ax[0],
     cMap="turbo",

@@ -74,9 +74,17 @@ class Transformation:
         """Apply the forward transformation."""
         return self._function(x)
 
+    def fwd(self, x):
+        """Convenience alias for the forward transformation."""
+        return self.forward(x)
+
     def backward(self, x):
         """Apply the inverse transformation."""
         return self._inverse_function(x)
+
+    def bwd(self, x):
+        """Convenience alias for the inverse transformation."""
+        return self.backward(x)
 
     def derivative_function(self, x):
         """Return the derivative of the forward transformation."""
@@ -152,6 +160,9 @@ class GassmannTransformation(Transformation):
         Upper bound used when numerically inverting velocity to saturation.
     n_saturation : int
         Number of saturation samples used for numerical inversion.
+    output_parameter : str
+        Output of the paired transformation. Use ``"vp"`` (default) for
+        velocity or ``"slowness"`` for slowness, i.e. ``1 / vp``.
     eps : float
         Finite-difference step size for numerical derivatives.
     derivative_function_analytic : callable | None
@@ -189,6 +200,7 @@ class GassmannTransformation(Transformation):
         correction_factor=10**4.5,
         maximum_saturation=0.55,
         n_saturation=10000,
+        output_parameter="vp",
         eps=1e-4,
         derivative_function_analytic=None,
         derivative_inverse_analytic=None,
@@ -233,6 +245,9 @@ class GassmannTransformation(Transformation):
             Upper bound used when numerically inverting velocity to saturation.
         n_saturation : int
             Number of saturation samples used for numerical inversion.
+        output_parameter : str
+            Output of the paired transformation. Use ``"vp"`` (default) for
+            velocity or ``"slowness"`` for slowness, i.e. ``1 / vp``.
         eps : float
             Finite-difference step size for numerical derivatives.
         derivative_function_analytic : callable | None
@@ -265,10 +280,21 @@ class GassmannTransformation(Transformation):
         self._correction_factor = correction_factor
         self._maximum_saturation = maximum_saturation
         self._n_saturation = n_saturation
+        self._output_parameter = output_parameter
+
+        if self._output_parameter not in ["vp", "slowness"]:
+            raise ValueError("output_parameter must be either 'vp' or 'slowness'")
+
+        if self._output_parameter == "vp":
+            forward = self.saturation_to_vp
+            inverse = self.vp_to_saturation
+        else:
+            forward = self.saturation_to_slowness
+            inverse = self.slowness_to_saturation
 
         super().__init__(
-            forward=self.saturation_to_vp,
-            inverse=self.vp_to_saturation,
+            forward=forward,
+            inverse=inverse,
             derivative_function_analytic=derivative_function_analytic,
             derivative_inverse_analytic=derivative_inverse_analytic,
             eps=eps,
@@ -348,6 +374,21 @@ class GassmannTransformation(Transformation):
         saturation_vector = np.linspace(0, maximum_saturation, int(n_saturation))
         vp_vector = self.saturation_to_vp(saturation_vector, correction_factor=correction_factor)
         return np.interp(vp, np.flip(vp_vector), np.flip(saturation_vector))
+
+    def saturation_to_slowness(self, saturation, correction_factor=None):
+        """Map saturation to slowness (1 / vp)."""
+        vp = self.saturation_to_vp(saturation=saturation, correction_factor=correction_factor)
+        return 1.0 / vp
+
+    def slowness_to_saturation(self, slowness, maximum_saturation=None, n_saturation=None, correction_factor=None):
+        """Map slowness (1 / vp) back to saturation."""
+        vp = 1.0 / slowness
+        return self.vp_to_saturation(
+            vp=vp,
+            maximum_saturation=maximum_saturation,
+            n_saturation=n_saturation,
+            correction_factor=correction_factor,
+        )
 
 
 class ArchieTransformation(Transformation):
