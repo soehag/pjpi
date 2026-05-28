@@ -9,6 +9,7 @@ below encapsulate the PLC and mesh creation logic.
 """
 
 from pathlib import Path
+import sys
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -22,9 +23,11 @@ import scipy as sP
 from pygimli.physics import ert
 from pygimli.physics import traveltime as tt
 
-from petrophysics import Transformation, GassmannTransformation, ArchieTransformation
-from parsing import parse_mesh_to_saturation_model, parse_mesh_to_resistivity_model, parse_mesh_to_vp_model
-from plotting_helpers import gather_datamatrices_by_offset, plot_datamatrices_by_offset, plot_apparent_velocities_from_data
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts_helper.petrophysics import Transformation, GassmannTransformation, ArchieTransformation
+from scripts_helper.parsing import parse_mesh_to_saturation_model, parse_mesh_to_resistivity_model, parse_mesh_to_vp_model
+from scripts_helper.plotting_helpers import gather_datamatrices_by_offset, plot_datamatrices_by_offset, plot_apparent_velocities_from_data
 
 # Use non-interactive backend for scripted figure export
 matplotlib.use("Agg")

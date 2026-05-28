@@ -6,6 +6,7 @@ crosshole mesh and data. It provides ``run_ert_geo_inversion`` and a
 """
 
 import os
+import sys
 from pathlib import Path
 from functools import partial
 import json
@@ -22,8 +23,9 @@ import pygimli as pg
 from pygimli.physics import ert
 from pygimli.physics import traveltime as tt
 
-from petrophysics import GassmannTransformation, ArchieTransformation
-import plotting_helpers as ph
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts_helper.petrophysics import GassmannTransformation, ArchieTransformation
+from scripts_helper import plotting_helpers as ph
 
 import gnmesh.gncore.geophysical as gp
 import gnmesh.gncore.petrophysical as pp
@@ -44,16 +46,16 @@ def main():
 
     This function performs filesystem setup, loads synthetic data and
     meshes, constructs petrophysical transformations and regularisation
-    operators, and runs `run_ert_petro_inversion` with default parameters.
+    operators, and runs `run_ert_geo_inversion` with default parameters.
     It is intended for command-line execution only.
     """
-    path_home = Path(__file__).resolve().parent
+    path_home = Path(__file__).resolve().parent.parent
     path_data_home = path_home / "data"
     path_data_synthetic = path_data_home / "synthetic"
-    path_data_results = path_data_home / "results_ert_petro"
+    path_data_results = path_data_home / "results_jsi"
 
     path_figures_home = path_home / "figures"
-    path_figures_results = path_figures_home / "figures_ert_petro"
+    path_figures_results = path_figures_home / "figures_jsi"
 
     path_data_results.mkdir(parents=True, exist_ok=True)
     path_figures_results.mkdir(parents=True, exist_ok=True)
@@ -287,12 +289,12 @@ def main():
 
     # %% Define function to conduct inversion and save results
 
-    def run_ert_petro_inversion(
+    def run_ert_geo_inversion(
         smoothing_para,
         damping_para,
         mesh_info_inversion_mesh=meshinfo_inversion,
         maximum_iterations=MAXIMUM_ITERATIONS,
-        max_update_per_step=(-MAX_SATURATION_UPDATE_PER_STEP,MAX_SATURATION_UPDATE_PER_STEP),
+        max_update_per_step=(-MAX_RESISTIVITY_UPDATE_PER_STEP,MAX_RESISTIVITY_UPDATE_PER_STEP),
         plot=True,
         save=True,
         force_recalculate=False,
@@ -318,33 +320,31 @@ def main():
                 result_dict = json.load(f)
             logger.info("Results loaded from %s", results_dict_path)
             #* Load final model
-            final_mesh_with_model_ert_petro = pg.load(str(path_data_results.joinpath(f"final_model.bms").absolute()))
+            final_mesh_with_model_ert_geo = pg.load(str(path_data_results.joinpath(f"final_model.bms").absolute()))
             #* Load final response
-            final_response_ert_petro = ert.load(str(path_data_results.joinpath(f"final_response.data").absolute()))
+            final_response_ert_geo = ert.load(str(path_data_results.joinpath(f"final_response.data").absolute()))
             #* Manager set to none
-            petrophysical_ert_inversion = None
+            geophysical_ert_inversion = None
 
         elif not results_dict_path.exists() or force_recalculate:
             logger.info("Invert on mesh with layer and decouple regularisation")
             decoupled_argument = (decoupled_region_vector, [(1,2)])
 
-            model_transformation_petro_ert = mths.transformation.LogarithmicBarrierTransformationTwoSided(
-                lower_barrier = SATURATION_MIN,
-                upper_barrier = SATURATION_MAX,
+            model_transformation_geo_ert = mths.transformation.LogarithmicBarrierTransformationTwoSided(
+                lower_barrier = RESISTIVITY_MIN,
+                upper_barrier = RESISTIVITY_MAX,
             )
 
-            initial_model_petro_ert = mths.modelinfo.ModelInfo(
-                model=initial_model_vector_saturation,
+            initial_model_geo_ert = mths.modelinfo.ModelInfo(
+                model=initial_model_vector_res,
                 mesh_info=mesh_info_inversion_mesh,
-                transformation=model_transformation_petro_ert,
+                transformation=model_transformation_geo_ert,
             )
 
-            petrophysical_data_ert = pd.physics_and_data_petrophysical(
-                manager_and_transformation_list=[
-                    (ert.ERTManager(), archie_reservoir),
-                ],
-                data_container_list=[ert_data],
-                data_observed_field_name_list=["rhoa"],
+            geophysical_data_ert = pd.pyhsics_and_data_geophysical(
+                manager=ert.ERTManager(),
+                data_container=ert_data,
+                data_observed_field_name="rhoa",
             )
 
             smoothing_ert = smoothing_operator()
@@ -353,62 +353,60 @@ def main():
             smoothing_ert.weight=smoothing_para
             damping_ert.weight=damping_para
 
-            petrophysical_ert_inversion = pp.GaussNewtonPetrophysical(
+            geophysical_ert_inversion = gp.GaussNewtonGeophysical(
                 mesh_info=mesh_info_inversion_mesh,
-                petrophysical_data=petrophysical_data_ert,
-                initial_model=initial_model_petro_ert,
-                model_regularisation=[smoothing_ert, damping_ert],
+                geophysical_data=geophysical_data_ert,
+                initial_models=[initial_model_geo_ert],
+                single_model_regularisation=[smoothing_ert, damping_ert],
                 decouple_regularisation=decoupled_argument,
                 maximum_iterations=maximum_iterations,
                 verbose=True,
             )
-            petrophysical_ert_inversion.maximum_update_per_step = max_update_per_step
-            petrophysical_ert_inversion.terminate_on_chi2_decrease = 0.01
-            petrophysical_ert_inversion.num_solver = "scipy_dense"
-            petrophysical_ert_inversion.run()
+            geophysical_ert_inversion.maximum_update_per_step = max_update_per_step
+            geophysical_ert_inversion.terminate_on_chi2_decrease = 0.01
+            geophysical_ert_inversion.run()
 
             #* Prepare final model
-            final_mesh_with_model_ert_petro = inversion_mesh.copy()
-            final_mesh_with_model_ert_petro["sat"] = petrophysical_ert_inversion.current_model.model
-            final_mesh_with_model_ert_petro["res"] = archie_reservoir.forward(petrophysical_ert_inversion.current_model.model)
+            final_mesh_with_model_ert_geo = inversion_mesh.copy()
+            final_mesh_with_model_ert_geo["res"] = geophysical_ert_inversion.current_models[0].model
 
             ert_man_final = ert.ERTManager()
             ert_man_final.setMesh(mesh=inversion_mesh)
             ert_man_final.setData(data=ert_data)
             
-            final_response_ert_petro_vector = ert_man_final.fop.response(final_mesh_with_model_ert_petro["res"])
-            final_response_ert_petro = ert_data.copy()
-            final_response_ert_petro["rhoa"] = final_response_ert_petro_vector
+            final_response_ert_geo_vector = ert_man_final.fop.response(geophysical_ert_inversion.current_models[0].model)
+            final_response_ert_geo = ert_data.copy()
+            final_response_ert_geo["rhoa"] = final_response_ert_geo_vector
 
-            rel_error_ert_petro = np.linalg.norm(np.array(ert_data["rhoa"])-np.array(final_response_ert_petro["rhoa"]))/np.linalg.norm(np.array(ert_data["rhoa"]))
-            chi2_ert_petro = ph.data_to_chi_squared(ert_data, final_response_ert_petro, "rhoa")
+            rel_error_ert_geo = np.linalg.norm(np.array(ert_data["rhoa"])-np.array(final_response_ert_geo["rhoa"]))/np.linalg.norm(np.array(ert_data["rhoa"]))
+            chi2_ert_geo = ph.data_to_chi_squared(ert_data, final_response_ert_geo, "rhoa")
 
-            logger.info("Relative error: %s for smoothing %s and damping %s", rel_error_ert_petro, smoothing_para, damping_para)
-            logger.info("Chi squared: %s for smoothing %s and damping %s", chi2_ert_petro, smoothing_para, damping_para)
+            logger.info("Relative error: %s for smoothing %s and damping %s", rel_error_ert_geo, smoothing_para, damping_para)
+            logger.info("Chi squared: %s for smoothing %s and damping %s", chi2_ert_geo, smoothing_para, damping_para)
 
-            data_misfit = [petrophysical_ert_inversion.tracking_dict[iteration]["data_misfit"] for iteration in range(0, petrophysical_ert_inversion.maximum_iterations+1)]
+            data_misfit = [geophysical_ert_inversion.tracking_dict[iteration]["data_misfit"] for iteration in range(0, geophysical_ert_inversion.maximum_iterations+1)]
             chi_squared_history = [
-                petrophysical_ert_inversion.tracking_dict[iteration]["chi_squared"] for iteration in range(0, petrophysical_ert_inversion.maximum_iterations+1)
+                geophysical_ert_inversion.tracking_dict[iteration]["chi_squared"] for iteration in range(0, geophysical_ert_inversion.maximum_iterations+1)
             ]
-            single_model_regularisation_misfit = [petrophysical_ert_inversion.tracking_dict[iteration]["single_model_regularisation_misfit"] for iteration in range(0, petrophysical_ert_inversion.maximum_iterations+1)]
+            single_model_regularisation_misfit = [geophysical_ert_inversion.tracking_dict[iteration]["single_model_regularisation_misfit"] for iteration in range(0, geophysical_ert_inversion.maximum_iterations+1)]
 
             if save:
-                final_response_ert_petro.save(str(path_data_results.joinpath(f"final_response.data").absolute()))
-                final_mesh_with_model_ert_petro.save(
+                final_response_ert_geo.save(str(path_data_results.joinpath(f"final_response.data").absolute()))
+                final_mesh_with_model_ert_geo.save(
                     str(path_data_results.joinpath(
                     f"final_model.bms"
                     ).absolute())
                     )
 
             result_dict = {
-                "inversion_name": "ert_petro",
-                "inversion_domain": "petro",
+                "inversion_name": "ert_geo",
+                "inversion_domain": "geo",
                 "joint_inversion": False,
-                "rel_error_ert": rel_error_ert_petro,
-                "final_chi2_ert": chi2_ert_petro,
+                "rel_error_ert": rel_error_ert_geo,
+                "final_chi2_ert": chi2_ert_geo,
                 "smoothing_ert": smoothing_para,
                 "damping_ert": damping_para,
-                "iterations": petrophysical_ert_inversion.maximum_iterations,
+                "iterations": geophysical_ert_inversion.maximum_iterations,
                 "data_misfit": data_misfit,
                 "chi_squared_history": chi_squared_history,
                 "single_model_regularisation_misfit": single_model_regularisation_misfit,
@@ -427,11 +425,9 @@ def main():
         #* Plotting results
         if plot:
             #* Plot final models
-            fig, axs = plt.subplots(1, 4, figsize=(15, 8), layout="constrained")
-            _=pg.show(original_mesh_w_models, data="sat", cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[0], label="Saturation")
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_ert_petro["sat"], cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[1], label="Saturation")
-            _=pg.show(original_mesh_w_models, data="res", cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[2], label="Resistivity")
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_ert_petro["res"], cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[3], label="Resistivity")
+            fig, axs = plt.subplots(1, 2, figsize=(10, 8), layout="constrained")
+            _=pg.show(original_mesh_w_models, data="res", cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[0], label="Resistivity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_ert_geo["res"], cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[1], label="Resistivity")
 
             for ax in axs:
                 ax.set_xlabel("X (m)")
@@ -440,13 +436,11 @@ def main():
                 ax.set_ylim(DOMAIN_YMIN, DOMAIN_YMAX)
                 plot_boreholes_on_mesh(ax)
 
-            axs[0].set_title("Original model saturation")
-            axs[1].set_title(f"Final model saturation ERT petro inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
-            axs[2].set_title("Original model resistivity")
-            axs[3].set_title(f"Final model resistivity ERT petro inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
+            axs[0].set_title("Original model")
+            axs[1].set_title(f"Final model ERT geo inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
             if save:
                 fig.savefig(
-                    str(path_figures_results.joinpath(f"final_models.jpg").absolute()),
+                    str(path_figures_results.joinpath(f"res_model.jpg").absolute()),
                     format='jpg',
                     dpi=300,
                     bbox_inches='tight'
@@ -473,7 +467,7 @@ def main():
 
             #* Plot final misfits
             residual_container = ert_data.copy()
-            residual_container["rhoa"] = np.abs(final_response_ert_petro["rhoa"] - ert_data["rhoa"]) / np.abs(ert_data["rhoa"])
+            residual_container["rhoa"] = np.abs(final_response_ert_geo["rhoa"] - ert_data["rhoa"]) / np.abs(ert_data["rhoa"])
             data_matrices, offsets = ph.gather_datamatrices_by_offset(residual_container)
             fig, axs = ph.plot_datamatrices_by_offset(
                 data_matrices=data_matrices[3:],
@@ -484,18 +478,17 @@ def main():
                 figsize=(20, 5),
                 layout='constrained',
             )
-            fig.suptitle(f"Relative residuals by offset for ERT petro inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
+            fig.suptitle(f"Relative residuals by offset for ERT geo inversion \n smoothing: {smoothing_para}, damping: {damping_para}")
             if save:
                 fig.savefig(str(path_figures_results.joinpath(f"final_residual.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
 
-            return petrophysical_ert_inversion, result_dict
+            return geophysical_ert_inversion, result_dict
 
     # Run a default inversion when invoked as a script.
-    # Damping=5e-1 reproduces paper results but clips quite heavily
-    run_ert_petro_inversion(
+    run_ert_geo_inversion(
         smoothing_para=1e0,
-        damping_para=5e-1,
+        damping_para=1e0,
     )
 
 

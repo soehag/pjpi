@@ -6,6 +6,7 @@ crosshole mesh and data. It provides ``run_ert_geo_inversion`` and a
 """
 
 import os
+import sys
 from pathlib import Path
 from functools import partial
 import json
@@ -22,8 +23,9 @@ import pygimli as pg
 from pygimli.physics import ert
 from pygimli.physics import traveltime as tt
 
-from petrophysics import GassmannTransformation, ArchieTransformation
-import plotting_helpers as ph
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts_helper.petrophysics import GassmannTransformation, ArchieTransformation
+from scripts_helper import plotting_helpers as ph
 
 import gnmesh.gncore.geophysical as gp
 import gnmesh.gncore.petrophysical as pp
@@ -47,7 +49,7 @@ def main():
     operators, and runs `run_ert_petro_inversion` with default parameters.
     It is intended for command-line execution only.
     """
-    path_home = Path(__file__).resolve().parent
+    path_home = Path(__file__).resolve().parent.parent
     path_data_home = path_home / "data"
     path_data_synthetic = path_data_home / "synthetic"
     path_data_results = path_data_home / "results_tt_petro"

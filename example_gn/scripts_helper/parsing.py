@@ -175,7 +175,7 @@ def parse_mesh_to_vp_model(
     Returns
     -------
     pygimli.core._pygimli_.RVector
-        Resistivity model.
+        P-wave velocity model.
     """
 
     #* First add saturation model to mesh if not already present
