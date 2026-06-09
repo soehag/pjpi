@@ -16,9 +16,12 @@ Email: hagen.soeding@eaps.ethz.ch
 import numpy as np
 import matplotlib.pyplot as plt
 import pygimli as pg
+import logging
 from . import spatialgradient as sG
 from . import transformation as tF
 from pygimli.viewer.mpl import drawModel, drawMeshBoundaries
+
+logger = logging.getLogger(__name__)
 
 class ModelInfo:
     """
@@ -81,7 +84,7 @@ class ModelInfo:
     """
     def __init__(self, model, mesh_info, taylor_order=1, transformation=tF.MultiplicativeTransformation(1), plotting_transformation=tF.MultiplicativeTransformation(1)):
         if transformation is None:
-            print("No transformation is passed - assuming identity - set transformation if needed")
+            logger.info("No transformation is passed - assuming identity - set transformation if needed")
         self._transformation = transformation
         self._mesh_info = mesh_info
         self._region_of_interest = self._mesh_info.region_of_interest
@@ -183,13 +186,13 @@ class ModelInfo:
         The sensitivities are always with respect to the untransformed parameters."""
         if hasattr(self, "_sensitivities"):
             if not self._sensitivities_updated_since_last_model_update:
-                print("WARNING - sensitivities have not been calculated since the last model \
+                logger.warning("WARNING - sensitivities have not been calculated since the last model \
                       update and may be faulty")
             if self._sensitivities is None:
-                print("WARNING - sensitivities are None")
+                logger.warning("WARNING - sensitivities are None")
             return self._sensitivities
 
-        print("Sensitivities not yet set - set it first")
+        logger.info("Sensitivities not yet set - set it first")
         return
 
     @sensitivities.setter
@@ -323,7 +326,7 @@ class ModelInfo:
             if "cmax" in kwargs:
                 gci.set_clim(None, kwargs["cmax"])
         else:
-            print("Laplacian is not calculated for taylor order 1")
+            raise ValueError("Laplacian is not calculated for taylor order 1")
         if show_mesh:
             drawMeshBoundaries(
                 ax,

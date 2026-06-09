@@ -1,17 +1,21 @@
-"""Physics and data utilities for geophysical and petrophysical inversion.
+"""
+Physics and data utilities for inversion.
 
-This module provides helper classes that wrap method managers and data
-containers to compute forward responses and Jacobians for geophysical and
-petrophysical inversions. It exposes utilities to filter sparse matrices and
-to obtain weighted Jacobians and responses suitable for stacking multiple
-methods.
+This module provides small wrapper classes and utilities to couple
+geophysical method managers with their data containers. The helpers
+compute forward responses, build Jacobians and provide convenience
+functions to manipulate sparse Jacobian matrices prior to stacking or
+regularisation.
+
+Functions
+---------
+remove_entries_below_thresh_from_coo
+    Remove small entries from a scipy COO matrix using a relative threshold.
 
 Classes
 -------
 pyhsics_and_data_geophysical
-    Wrapper for a single geophysical method providing jacobian/response
-physics_and_data_petrophysical
-    Combines multiple geophysical methods for petrophysical inversion
+    Wrapper for a single geophysical method providing jacobian/response.
 """
 
 import logging
@@ -36,7 +40,7 @@ def remove_entries_below_thresh_from_coo(coo_matrix, relativ_threshold):
     coo_matrix_new = coo_matrix.copy()
     max_entry = np.max(np.abs(coo_matrix_new.data))
     mask = np.abs(coo_matrix_new.data) > relativ_threshold * max_entry
-    logger.debug("Number of non-zero values in Jacobian: %s - %s", np.sum(mask), coo_matrix_new.size)
+    logger.info("Number of non-zero values in Jacobian: %s - %s", np.sum(mask), coo_matrix_new.size)
     coo_matrix_new.data = coo_matrix_new.data[mask]
     coo_matrix_new.row = coo_matrix_new.row[mask]
     coo_matrix_new.col = coo_matrix_new.col[mask]

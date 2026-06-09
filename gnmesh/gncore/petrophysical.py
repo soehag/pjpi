@@ -1,4 +1,5 @@
-"""Petrophysical Gauss-Newton manager.
+"""
+Petrophysical Gauss-Newton manager.
 
 Contains `GaussNewtonPetrophysical` which runs petrophysical inversions
 that couple petrophysical models with geophysical forward operators.
@@ -81,7 +82,7 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
             else:
                 self._model_regularisation = [model_regularisation]
             if self.verbose:
-                print("Number of model regularisations: ", len(self._model_regularisation))
+                logger.info("Number of model regularisations: %s", len(self._model_regularisation))
         self._number_of_single_model_regularisation = len(self._model_regularisation)
 
         # Set the maximum number of iterations
@@ -128,10 +129,10 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
             assert isinstance(decouple_regularisation[1], list), "Decouple regularisation must be a numpy array."
             assert all(isinstance(reg, (list, tuple)) for reg in decouple_regularisation[1]), "Decouple regularisation must be a list of lists."
             if self.verbose:
-                print("Decoupling regularisation provided.")
+                logger.info("Decoupling regularisation provided.")
         else:
             if self.verbose:
-                print("No decoupling regularisation provided.")
+                logger.info("No decoupling regularisation provided.")
         self.decouple_regularisation = decouple_regularisation
 
         # Set the termination criterion
@@ -204,11 +205,11 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
             logger.info("----------Running Gauss-Newton inversion.----------")
 
         if self._current_iteration == self._maximum_iterations:
-            print("----------Maximum number of iterations reached. Returning.----------")
+            logger.info("----------Maximum number of iterations reached. Returning.----------")
             return
 
         while self._current_iteration < self._maximum_iterations:
-            print(f"----------Processing iteration {self._current_iteration+1}----------")
+            logger.info("----------Processing iteration %s----------", self._current_iteration+1)
             start_time_iteration = time.time()
             # Create iteration dictionary for tracking if necessary
             if self._current_iteration not in self._tracking_dict:
@@ -220,7 +221,7 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
                 self._tracking_dict[self._current_iteration]["models"] = self._current_model.copy()
 
             if self.verbose:
-                print("----------Start: Calculating geophysical jacobians and rhs.----------")
+                logger.info("----------Start: Calculating geophysical jacobians and rhs.----------")
                 start_time = time.time()
 
             # Set up the petrophysical jacobian and response and apply model transformation
@@ -228,13 +229,11 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
                 self.get_petrophysical_jacobian_and_rhs()
             
             if self.verbose:
-                print(
-                    f"Time taken to calculate geophysical jacobians and rhs: {time.time()-start_time:.2f} seconds."
-                )
-                print("----------End: Calculating geophysical jacobians and rhs.----------")
+                logger.info("Time taken to calculate geophysical jacobians and rhs: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating geophysical jacobians and rhs.----------")
 
             if self.verbose:
-                print("----------Start: Calculating model regularisation jacobians and rhs.----------")
+                logger.info("----------Start: Calculating model regularisation jacobians and rhs.----------")
             start_time = time.time()
 
             # Set up the model regularisation
@@ -242,10 +241,8 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
                 self.get_model_regularisation_jacobian_and_rhs()
             
             if self.verbose:
-                print(
-                    f"Time taken to calculate model regularisation jacobians and rhs: {time.time()-start_time:.2f} seconds."
-                )
-                print("----------End: Calculating model regularisation jacobians and rhs.----------")
+                logger.info("Time taken to calculate model regularisation jacobians and rhs: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating model regularisation jacobians and rhs.----------")
 
             #* Save misfit values -  these are technically from the iteration before
             self._tracking_dict[self._current_iteration]["data_misfit"] = data_misfit_list
@@ -263,13 +260,13 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
                 if chi_curr is not None and chi_prev is not None and len(chi_curr) > 0:
                     chi2_percentage_decrease_list = self.percent_decrease_in_chi2(self._current_iteration)
                     if self.verbose:
-                        print(f"Chi2 percentage decrease: {chi2_percentage_decrease_list}")
+                        logger.info("Chi2 percentage decrease: %s", chi2_percentage_decrease_list)
                     if all([chi2_percentage_decrease < self._terminate_on_chi2_decrease for chi2_percentage_decrease in chi2_percentage_decrease_list]):
-                        print("Chi2 decrease criterion reached. Returning.")
+                        logger.info("Chi2 decrease criterion reached. Returning.")
                         break
 
             if self.verbose:
-                print("----------Start: Calculating the full jacobian and rhs.----------")
+                logger.info("----------Start: Calculating the full jacobian and rhs.----------")
             start_time = time.time()
 
             #* Combine the jacobians and rhs
@@ -284,13 +281,11 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
                 full_rhs = rhs_data
 
             if self.verbose:
-                print(
-                    f"Time taken to calculate the full jacobian and rhs: {time.time()-start_time:.2f} seconds."
-                )
-                print("----------End: Calculating the full jacobian and rhs.----------")
+                logger.info("Time taken to calculate the full jacobian and rhs: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating the full jacobian and rhs.----------")
 
             if self.verbose:
-                print("----------Start: Solving linear system.----------")
+                logger.info("----------Start: Solving linear system.----------")
 
             #* Calculate the model update
             model_update_small = self.solve_linear_system(
@@ -307,10 +302,10 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
                 raise ValueError("Invalid scheme provided.")
 
             if self.verbose:
-                print("----------End: Solving linear system.----------")
+                logger.info("----------End: Solving linear system.----------")
 
             if self.verbose:
-                print("----------Start: Calculating model update.----------")
+                logger.info("----------Start: Calculating model update.----------")
             start_time = time.time()
 
             petrophysical_model_update = self.get_model_update_from_full_inversion_results(
@@ -322,10 +317,8 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
             )
 
             if self.verbose:
-                print(
-                    f"Time taken to calculate model update: {time.time()-start_time:.2f} seconds."
-                )
-                print("----------End: Calculating model update.----------")
+                logger.info("Time taken to calculate model update: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating model update.----------")
             
 
             #* Save updates and models
@@ -333,10 +326,8 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
             self._tracking_dict[self._current_iteration]["model"] = self.current_model.copy()
             self._current_iteration += 1
             if self.verbose:
-                print(
-                    f"Time taken for iteration {self._current_iteration}: {time.time()-start_time_iteration:.2f} seconds."
-                )
-                print("----------End: Iteration.----------")
+                logger.info("Time taken for iteration %s: %.2f seconds.", self._current_iteration, time.time()-start_time_iteration)
+                logger.info("----------End: Iteration.----------")
         
         if self._current_iteration not in self._tracking_dict:
             self._tracking_dict[self._current_iteration] = {}
@@ -348,7 +339,7 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
         #* Calculate the final data misfit
         _, _, _, data_misfit_list, chi_squared_list = self.get_petrophysical_jacobian_and_rhs()
         if self.verbose:
-            print(data_misfit_list)
+            logger.info("%s", data_misfit_list)
         self._tracking_dict[self._current_iteration]["data_misfit"] = data_misfit_list
         self._tracking_dict[self._current_iteration]["chi_squared"] = chi_squared_list
         
@@ -361,11 +352,11 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
 
         #* Adjust maximum iteration
         if self._current_iteration == self._maximum_iterations:
-            print("Maximum number of iterations reached.")
+            logger.info("Maximum number of iterations reached.")
         else:
-            print(f"Finished Gauss-Newton inversion after {self._current_iteration} iterations. Overwriting maximum iterations.")
+            logger.info("Finished Gauss-Newton inversion after %s iterations. Overwriting maximum iterations.", self._current_iteration)
             self._maximum_iterations = self._current_iteration
-        print("Gauss-Newton inversion finished.")
+        logger.info("Gauss-Newton inversion finished.")
 
     def get_petrophysical_jacobian_and_rhs(self):
         """ Returns the petrophysical jacobian and right hand side."""

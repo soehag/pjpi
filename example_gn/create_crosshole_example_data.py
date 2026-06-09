@@ -28,6 +28,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts_helper.petrophysics import Transformation, GassmannTransformation, ArchieTransformation
 from scripts_helper.parsing import parse_mesh_to_saturation_model, parse_mesh_to_resistivity_model, parse_mesh_to_vp_model
 from scripts_helper.plotting_helpers import gather_datamatrices_by_offset, plot_datamatrices_by_offset, plot_apparent_velocities_from_data
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Use non-interactive backend for scripted figure export
 matplotlib.use("Agg")
@@ -514,9 +517,9 @@ def add_sensor_positions_to_plc(
             else:
                 plc_temp.createNodeWithCheck(node_to_add, edgeCheck=True)
 
-    print(f"Skipped {skipped_count} nodes due to minimum distance")
+    logger.info("Skipped %s nodes due to minimum distance", skipped_count)
     nodes_after = plc_temp.nodeCount()
-    print(f"Added {nodes_after - nodes_prior} nodes")
+    logger.info("Added %s nodes", nodes_after - nodes_prior)
     return plc_temp
 
 ## Create test meshes for testing the boundary mesh generation and sensor position addition
@@ -650,7 +653,7 @@ k_factor_mesh = pg.meshtools.createMesh(domain_with_co2_plume_and_sensors, quali
 k_factor_mesh, _ = add_boundary_mesh(k_factor_mesh)
 
 fig, ax = plt.subplots(1, 1, figsize=(4, 8))
-print("hi")
+
 drawMesh(
     ax=ax,
     mesh=k_factor_mesh,
@@ -666,7 +669,6 @@ drawBoundaryMarkers(
 ax.set_title("Mesh for geometric factor calculation")
 plot_boreholes_on_mesh(ax)
 fig.savefig(setup_figures / "k_factor_mesh.jpg", format='jpg', dpi=300, bbox_inches='tight')
-print("there")
 ert_scheme["k"]=ert.createGeometricFactors(ert_scheme, numerical=True, mesh=k_factor_mesh, verbose=True)
 
 ert_scheme.save(str(path_data_synthetic / "ert_scheme.data"))
@@ -724,18 +726,18 @@ sensor_positions_ert = ert_scheme.sensorPositions()
 first_configuration = np.where(
     (a == 1) & (b == 1 + ELECTRODE_NUMBER) & (m == 2) & (n == 2 + ELECTRODE_NUMBER)
 )[0][0]
-print(f"First configuration indices: {first_configuration}")
+    logger.info("First configuration indices: %s", first_configuration)
 
 second_configuration = np.where(
     (a == 11) & (b == 11 + ELECTRODE_NUMBER) & (m == 13) & (n == 13 + ELECTRODE_NUMBER)
 )[0][0]
-print(f"Second configuration indices: {second_configuration}")
+    logger.info("Second configuration indices: %s", second_configuration)
 
 
 third_configuration = np.where(
     (a == 21) & (b == 21 + ELECTRODE_NUMBER) & (m == 24) & (n == 24 + ELECTRODE_NUMBER)
 )[0][0]
-print(f"Third configuration indices: {third_configuration}")
+    logger.info("Third configuration indices: %s", third_configuration)
 
 # First plot ERT scheme
 configurations_to_plot = [first_configuration, second_configuration, third_configuration]
@@ -1112,7 +1114,7 @@ fig.savefig(setup_figures / "final_models_on_mesh.jpg", format='jpg', dpi=300, b
 for rel_noise in [0.0, 0.03]:
     data_dongle=f"noise_{rel_noise*100:.0f}"
     #* Simulate ERT data
-    print(f"Creating data for case {data_dongle}")
+    logger.info("Creating data for case %s", data_dongle)
     ert_data = ert.simulate(mesh=final_mesh_with_models, scheme=ert_scheme, res=final_mesh_with_models["res"], verbose=True, noiseLevel=rel_noise, noiseAbs=0.0, seed=1337)
     ert_data["err"] = rel_noise
     ert_data.save(str(path_data_synthetic.joinpath(f"ert_measurement_{data_dongle}.data")))
@@ -1162,11 +1164,11 @@ for cell in inversion_mesh.cells():
         try:
             neighbour_cells.append(cell.neighborCell(j).id())
         except AttributeError:
+            logger.warning("Cell %s has no neighbour at position %s", cell.id(), j)
             pass
-            # print(f"Cell {cell.id()} has no neighbour at position {j}")
     if len(neighbour_cells) < minimum_cell_neighbour_count:
         minimum_cell_neighbour_count = len(neighbour_cells)
-print(f"Minimum number of neighbour cells: {minimum_cell_neighbour_count}")
+logger.info("Minimum number of neighbour cells: %s", minimum_cell_neighbour_count)
 
 # Check if all sensor position are nodes
 node_positions = np.array([node.pos() for node in inversion_mesh.nodes()])
@@ -1174,7 +1176,7 @@ node_check=True
 for sensor in sensor_positions:
     if sensor not in node_positions:
         node_check=False
-print(f"Node check for: {node_check}")
+logger.info("Node check for: %s", node_check)
 
 # Print inversion mesh with sensor positions
 fig, ax = plt.subplots(1, 1, figsize=(4, 8))

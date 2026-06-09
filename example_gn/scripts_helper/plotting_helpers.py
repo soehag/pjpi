@@ -44,7 +44,7 @@ def gather_datamatrices_by_offset(data_ert):
 
     unique_offset_values = np.unique(np.concatenate((offset_A, offset_B)))
     unique_offset_values.sort()
-    logger.debug("Unique offset values: %s", unique_offset_values)
+    logger.info("Unique offset values: %s", unique_offset_values)
 
     data_matrix_list = []
 
@@ -189,7 +189,7 @@ def data_to_chi_squared(observed, simulated, data_field, err_field="err", regu=1
     observed = np.array(observed[data_field])
     simulated = np.array(simulated[data_field])
     if np.any(err == 0):
-        print("Error field contains zero values")
+        logger.info("Error field contains zero values")
     err[err == 0] = regu
     chi_squared = np.sum(((simulated - observed) / (err*observed)) ** 2)
     chi_squared /= observed.size
@@ -198,14 +198,14 @@ def data_to_chi_squared(observed, simulated, data_field, err_field="err", regu=1
 def plot_misfits_from_results_dict(results_dict, data_misfit="chi_squared", fields_to_plot=None):
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     iterations = np.arange(0, results_dict["iterations"]+1)+1
-    logger.debug("Found iterations: %s", iterations)
+    logger.info("Found iterations: %s", iterations)
 
     number_of_methods = len(results_dict["data_misfit"][0])
-    logger.debug("Number of methods: %s", number_of_methods)
+    logger.info("Number of methods: %s", number_of_methods)
 
     if fields_to_plot is None:
         fields_to_plot = ["data", "single", "double"]
-    logger.debug("Fields to plot: %s", fields_to_plot)
+    logger.info("Fields to plot: %s", fields_to_plot)
 
     assert data_misfit in ["data", "chi_squared"], "Data misfit must be either 'data' or 'chi_squared'"
     if data_misfit == "data":
@@ -224,15 +224,15 @@ def plot_misfits_from_results_dict(results_dict, data_misfit="chi_squared", fiel
                 data_misfit_temp = [misfit[i] for misfit in results_dict[data_error_tag]]
                 ax.plot(iterations, data_misfit_temp, label=data_label_temp)
         except Exception as e:
-            print(e)
-            print("Data misfit not available")
+            logger.exception(e)
+            logger.warning("Data misfit not available")
 
     if "single" in fields_to_plot:
         try:
             ax.plot(iterations, results_dict["single_model_regularisation_misfit"], label="Single model regularisation misfit", color="green")
         except Exception as e:
-            print(e)
-            print("Single model regularisation misfit not available")
+            logger.exception(e)
+            logger.warning("Single model regularisation misfit not available")
 
     if "dual" in fields_to_plot:
         try:
@@ -241,8 +241,8 @@ def plot_misfits_from_results_dict(results_dict, data_misfit="chi_squared", fiel
             ax2.set_ylabel("Misfit of XG-term")
             ax2.legend(loc="upper center")
         except Exception as e:
-            print(e)
-            print("Joint model regularisation misfit not available")
+            logger.exception(e)
+            logger.warning("Joint model regularisation misfit not available")
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Misfit")
     ax.set_title("Misfit history")

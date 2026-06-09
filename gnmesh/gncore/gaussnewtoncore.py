@@ -1,10 +1,28 @@
-"""Shared core API for Gauss-Newton inversion managers."""
+"""
+Gauss-Newton core utilities.
+
+This module provides the shared core API used by Gauss-Newton inversion
+managers. It implements the `GaussNewtonCore` class which encapsulates
+configuration, solver selection (CPU/GPU), scaling utilities and helper
+methods for solving the linear systems that arise during inversion.
+
+The module is intentionally implementation-focused and should not perform
+I/O. Logging is performed via the standard library ``logging`` module.
+
+Notes
+-----
+The implementation supports optional CuPy acceleration when available;
+when CuPy is not present the code falls back to SciPy/NumPy CPU solvers.
+"""
 
 from typing import Any
 
 import time
 import numpy as np
 import scipy as sP
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Optional GPU support (cupy). If unavailable, fall back to CPU solvers.
 try:
@@ -252,7 +270,7 @@ class GaussNewtonCore:
         # Handle cupy availability fallback
         if solver.startswith("cupy") and not _HAVE_CUPY:
             if self.verbose:
-                print(f"Requested solver '{solver}' but cupy is unavailable — falling back to scipy.")
+                logger.warning("Requested solver '%s' but cupy is unavailable — falling back to scipy.", solver)
             solver = "scipy_sparse" if solver == "cupy_sparse" else "scipy_dense"
 
         # Solve with chosen backend
@@ -310,27 +328,27 @@ class GaussNewtonCore:
 
         if getattr(self, "verbose", False):
             try:
-                print(f"Solve on iteration: {self.current_iteration+1}.")
+                logger.info("Solve on iteration: %s.", self.current_iteration+1)
             except Exception:
-                print("Solve completed.")
+                logger.info("Solve completed.")
             try:
-                print(f"Reason for termination: {reason[0]} after {reason[1]} iterations.")
+                logger.info("Reason for termination: %s after %s iterations.", reason[0], reason[1])
             except Exception:
                 pass
             try:
-                print(f"Condition number: {condition_number:.2e}.")
+                logger.info("Condition number: %.2e.", condition_number)
             except Exception:
                 pass
             try:
-                print(f"Relative residual: {residual:.2e}.")
+                logger.info("Relative residual: %.2e.", residual)
             except Exception:
                 pass
-            print(f"Time taken to solve the system: {time.time()-start_time:.2f} seconds.")
+            logger.info("Time taken to solve the system: %.2f seconds.", time.time()-start_time)
 
         x = x * scaling_vector
 
         if self.verbose:
-            print(f"Residual of the solution: {np.linalg.norm(A @ x - b) / np.linalg.norm(b):.2e}.")
+            logger.info("Residual of the solution: %.2e.", np.linalg.norm(A @ x - b) / np.linalg.norm(b))
         return x
 
     def clip_model_vector(self, model_vector_update, model_no: int = 0):
@@ -343,12 +361,9 @@ class GaussNewtonCore:
                 model_update_vector_on_roi = model_vector_update[self._region_of_interest]
                 minimum_update_cell = np.argmin(model_vector_update)
                 maximum_update_cell = np.argmax(model_vector_update)
-                print(
-                    "Updates before clipping:" +
-                    f"Size: {np.linalg.norm(model_update_vector_on_roi):.2e}. " +
-                    f"Minimum: {model_vector_update[minimum_update_cell]:.2e} at cell {minimum_update_cell}. " +
-                    f"Maximum: {model_vector_update[maximum_update_cell]:.2e} at cell {maximum_update_cell}. " +
-                    f"Median: {np.median(model_update_vector_on_roi):.2e}."
+                logger.info(
+                    "Updates before clipping: Size: %.2e. Minimum: %.2e at cell %s. Maximum: %.2e at cell %s. Median: %.2e.",
+                    np.linalg.norm(model_update_vector_on_roi), model_vector_update[minimum_update_cell], minimum_update_cell, model_vector_update[maximum_update_cell], maximum_update_cell, np.median(model_update_vector_on_roi)
                 )
             except Exception:
                 pass
@@ -369,7 +384,7 @@ class GaussNewtonCore:
             clipping_required = True
 
         if getattr(self, "verbose", False) and clipping_required:
-            print(f"Too small: #{np.sum(update_too_small_vector)}, too big: #{np.sum(update_too_big_vector)}. Clipping required.")
+            logger.info("Too small: #%s, too big: #%s. Clipping required.", np.sum(update_too_small_vector), np.sum(update_too_big_vector))
 
         if clipping_required:
             update_vector_clipped = np.clip(model_vector_update, lower, upper)
@@ -378,12 +393,9 @@ class GaussNewtonCore:
                     model_update_vector_on_roi = update_vector_clipped[self._region_of_interest]
                     minimum_update_cell = np.argmin(update_vector_clipped)
                     maximum_update_cell = np.argmax(update_vector_clipped)
-                    print(
-                        "Updates after clipping:" +
-                        f"Size: {np.linalg.norm(model_update_vector_on_roi):.2e}. " +
-                        f"Minimum: {model_update_vector_on_roi[minimum_update_cell]:.2e} at cell {minimum_update_cell}. " +
-                        f"Maximum: {model_update_vector_on_roi[maximum_update_cell]:.2e} at cell {maximum_update_cell}. " +
-                        f"Median: {np.median(model_update_vector_on_roi):.2e}."
+                    logger.info(
+                        "Updates after clipping: Size: %.2e. Minimum: %.2e at cell %s. Maximum: %.2e at cell %s. Median: %.2e.",
+                        np.linalg.norm(model_update_vector_on_roi), model_update_vector_on_roi[minimum_update_cell], minimum_update_cell, model_update_vector_on_roi[maximum_update_cell], maximum_update_cell, np.median(model_update_vector_on_roi)
                     )
                 except Exception:
                     pass
@@ -416,7 +428,7 @@ class GaussNewtonCore:
                 rows_to_remove.extend(coupled_row_indices_temp)
             rows_to_keep = np.setdiff1d(np.arange(matrix.shape[0]), rows_to_remove)
             if getattr(self, "verbose", False):
-                print(f"Removing {len(rows_to_remove)} coupled rows.")
+                logger.info("Removing %s coupled rows.", len(rows_to_remove))
             matrix = matrix[rows_to_keep]
             rhs = rhs[rows_to_keep]
         return matrix, rhs

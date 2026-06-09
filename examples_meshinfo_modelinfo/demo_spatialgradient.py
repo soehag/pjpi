@@ -10,6 +10,9 @@ import pygimli as pg
 import gnmesh.meshtools as mI
 import gnmesh.meshtools.spatialgradient as sG
 from pygimli.viewer.mpl import drawModel, drawSelectedMeshBoundaries
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -92,7 +95,7 @@ def main():
         mesh_info=mi,
         taylor_order=2,
     )
-    print(hessian_matrix_list)
+    logger.info("Hessian matrix list: %s", hessian_matrix_list)
     sG.plot_hessian_matrix_overview(
         hessian_matrix_list=hessian_matrix_list,
         mesh=mesh,
@@ -100,7 +103,7 @@ def main():
     )
 
     plt.show()
-    print("Gradient demo finished — check plots.")
+    logger.info("Gradient demo finished — check plots.")
 
 
 if __name__ == "__main__":

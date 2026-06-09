@@ -13,6 +13,9 @@ import gnmesh.meshtools as mI
 import gnmesh.meshtools.modelinfo as modI
 from pygimli.viewer.mpl import drawModel, drawMeshBoundaries
 import gnmesh.meshtools.transformation as tF
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -44,7 +47,7 @@ def main():
         neighbour_function=mI.meshinfo.get_n_closest_neighbours_function_for_mesh(mesh=mesh, n=8)
         )
     
-    print(f"Minimum neighbours: {np.min([len(cni.neighbour_cells) for cni in mi.cell_neighbour_info])}")
+    logger.info("Minimum neighbours: %s", np.min([len(cni.neighbour_cells) for cni in mi.cell_neighbour_info]))
 
     minimum_model_value = np.min(model)
     maximum_model_value = np.max(model)

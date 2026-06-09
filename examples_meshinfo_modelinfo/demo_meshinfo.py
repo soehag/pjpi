@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 import pygimli as pg
 import gnmesh.meshtools as mI
 from pygimli.viewer.mpl import drawModel, drawMeshBoundaries
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -23,7 +26,7 @@ def main():
     )
 
     min_cell_neighbours = np.min([len(cni.neighbour_cells) for cni in mi.cell_neighbour_info])
-    print(f"Minimum number of neighbour cells: {min_cell_neighbours}")
+    logger.info("Minimum number of neighbour cells: %s", min_cell_neighbours)
 
     # Pick a stable interior point near the lower-right quadrant for the neighbourhood example.
     px = 0.5
@@ -125,7 +128,7 @@ def main():
     axs_h[2].set_title("Hessian yy")
     fig_h.suptitle('MeshInfo: Hessian sensitivity components', fontsize=12)
 
-    print(f"GN1 sensitivity vector length: {len(ind_gn1)}; GN2: {len(ind_gn2)}")
+    logger.info("GN1 sensitivity vector length: %s; GN2: %s", len(ind_gn1), len(ind_gn2))
 
     # Show region of interest in the mesh plot
     mi.show_region_of_interest()

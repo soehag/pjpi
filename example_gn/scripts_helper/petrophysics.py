@@ -1,4 +1,7 @@
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 K_CO2 = 0.01  # Gpa
@@ -52,18 +55,18 @@ class Transformation:
         self._eps = eps
 
         if derivative_function_analytic is not None:
-            print("Using analytic derivative for the forward transformation.")
+            logger.info("Using analytic derivative for the forward transformation.")
             self._difference_function = "analytic"
         else:
-            print("Using finite-difference derivative for the forward transformation.")
+            logger.info("Using finite-difference derivative for the forward transformation.")
             assert difference_forward in ["forward", "backward"], "Difference must be either forward or backward"
             self._difference_function = difference_forward
 
         if derivative_inverse_analytic is not None:
-            print("Using analytic derivative for the inverse transformation.")
+            logger.info("Using analytic derivative for the inverse transformation.")
             self._difference_inverse = "analytic"
         else:
-            print("Using finite-difference derivative for the inverse transformation.")
+            logger.info("Using finite-difference derivative for the inverse transformation.")
             assert difference_inverse in ["forward", "backward"], "Difference must be either forward or backward"
             self._difference_inverse = difference_inverse
 

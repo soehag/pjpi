@@ -164,7 +164,7 @@ def main():
     initial_model_vector_res = np.ones(inversion_mesh.cellCount()) * mean_apparent_resistivity
     initial_model_vector_slowness = np.ones(inversion_mesh.cellCount()) * (1/mean_apparent_vp)
     initial_model_vector_saturation = np.ones(inversion_mesh.cellCount()) * np.mean([saturation_from_mean_resistivity, saturation_from_mean_vp])
-    print(f"Initial saturation: {initial_model_vector_saturation[0]}")
+    logger.info("Initial saturation: %s", initial_model_vector_saturation[0])
 
     # Region of interest for inversion (exclude outer mesh)
     BUFFER_X = 30
@@ -244,8 +244,8 @@ def main():
 
     VELOCITY_MIN = np.floor((np.min(original_mesh_w_models["vp"])-50)*1e-1)*1e1
     VELOCITY_MAX = np.ceil((np.max(original_mesh_w_models["vp"])+50)*1e-1)*1e1
-    print(f"Velocity min: {VELOCITY_MIN}, max: {VELOCITY_MAX}")
-    print(f"In mesh: {np.min(original_mesh_w_models['vp'])}, {np.max(original_mesh_w_models['vp'])}")
+    logger.info("Velocity min: %s, max: %s", VELOCITY_MIN, VELOCITY_MAX)
+    logger.info("In mesh: %s, %s", np.min(original_mesh_w_models['vp']), np.max(original_mesh_w_models['vp']))
 
     logger.info("Velocity min: %s, max: %s", VELOCITY_MIN, VELOCITY_MAX)
     logger.info("In mesh: %s, %s", np.min(original_mesh_w_models["vp"]), np.max(original_mesh_w_models["vp"]))

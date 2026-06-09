@@ -21,6 +21,9 @@ Email: hagen.soeding@eaps.ethz.ch
 
 
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MultiplicativeTransformation:
     """Scale values by a constant multiplier."""
@@ -87,7 +90,8 @@ class LogarithmicBarrierTransformationGreaterThan:
         unclipped_backward = self._barrier + np.exp(x)
         # Clip only when the inverse gets numerically too close to the barrier.
         if np.any(unclipped_backward < self._barrier + self._eps):
-            print("Warning: Inverse of logarithmic barrier transformation is clipped.")
+            import logging
+            logging.getLogger(__name__).warning("Warning: Inverse of logarithmic barrier transformation is clipped.")
         return np.clip(unclipped_backward, self._barrier + self._eps, None)
     
     def derivative_forward(self, x):
@@ -116,7 +120,8 @@ class LogarithmicBarrierTransformationLessThan:
         """ Inverse of the logarithmic barrier transformation for x < barrier. """
         unclipped_backward = self._barrier - np.exp(-x)
         if np.any(unclipped_backward > self._barrier - self._eps):
-            print("Warning: Inverse of logarithmic barrier transformation is clipped.")
+            import logging
+            logging.getLogger(__name__).warning("Warning: Inverse of logarithmic barrier transformation is clipped.")
         return np.clip(unclipped_backward, None, self._barrier - self._eps)
     
     def derivative_forward(self, x):
@@ -149,16 +154,16 @@ class LogarithmicBarrierTransformationTwoSided:
         """ Inverse of the logarithmic barrier transformation for lower_barrier < x < upper_barrier. """
         if np.any(np.abs(x) > self._eps_exp):
             # Clip x to avoid overflow in np.exp(x).
-            print("Warning: Inverse of logarithmic barrier transformation is clipped")
+            logger.warning("Warning: Inverse of logarithmic barrier transformation is clipped")
 
         x_clipped = np.clip(x, a_min=-self._eps_exp, a_max=self._eps_exp)
 
         # Clip the result to keep it strictly inside the admissible interval and avoid boundary issues.
         unclipped_backward = (self._lower_barrier + self._upper_barrier * np.exp(x_clipped)) / (1 + np.exp(x_clipped))
         if np.any(unclipped_backward < self._lower_barrier + self._eps_barrier):
-            print("Warning: Inverse of logarithmic barrier transformation is clipped from below.")
+            logger.warning("Warning: Inverse of logarithmic barrier transformation is clipped from below.")
         if np.any(unclipped_backward > self._upper_barrier - self._eps_barrier):
-            print("Warning: Inverse of logarithmic barrier transformation is clipped from above.")
+            logger.warning("Warning: Inverse of logarithmic barrier transformation is clipped from above.")
         return np.clip(unclipped_backward, self._lower_barrier + self._eps_barrier, self._upper_barrier - self._eps_barrier)
 
         
@@ -202,7 +207,7 @@ class LogarithmicBarrierTransformationTwoSided:
         """ Derivative of the inverse of the logarithmic barrier transformation for lower_barrier < x < upper_barrier. """
         if np.any(np.abs(x) > self._eps_exp):
             # Clip x to avoid overflow in np.exp(x).
-            print("Warning: Inverse of logarithmic barrier transformation is clipped")
+            logger.warning("Warning: Inverse of logarithmic barrier transformation is clipped")
             x_clipped = np.clip(x, a_min=-self._eps_exp, a_max=self._eps_exp)
         return (np.exp(x_clipped) * (self._upper_barrier - self._lower_barrier))/(1 + np.exp(x_clipped))**2
         

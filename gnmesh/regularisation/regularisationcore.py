@@ -39,7 +39,6 @@ def remove_entries_below_thresh_from_coo(coo_matrix, relativ_threshold):
         return coo_matrix_new
     max_entry = np.max(np.abs(coo_matrix_new.data))
     mask = np.abs(coo_matrix_new.data) > relativ_threshold * max_entry
-    # print(f"Number of non-zero values in Jacobian: {np.sum(mask)} - {coo_matrix_new.size}")
     coo_matrix_new.data = coo_matrix_new.data[mask]
     coo_matrix_new.row = coo_matrix_new.row[mask]
     coo_matrix_new.col = coo_matrix_new.col[mask]

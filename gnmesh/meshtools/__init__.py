@@ -1,9 +1,14 @@
-##################################################
-# This is the init-file for the package 'gnmesh.meshtools'.
-# Author: Hagen Söding
-# Address: hagen.soeding@eaps.ethz.ch
-# Date: 2026/05/26
-##################################################
+"""
+meshtools package exports and convenience imports.
+
+This package bundles helpers for mesh bookkeeping, spatial gradient and
+Hessian computations, and small transformation classes used throughout
+the examples and inversion code.
+
+Top-level exports provide convenient access to commonly used symbols
+such as `MeshInfo`, `ModelInfo`, gradient and Hessian utilities and the
+logarithmic barrier transformations.
+"""
 
 from . import meshinfo
 from . import modelinfo

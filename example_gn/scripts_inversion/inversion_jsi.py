@@ -243,8 +243,8 @@ def main():
 
     VELOCITY_MIN = np.floor((np.min(original_mesh_w_models["vp"])-50)*1e-1)*1e1
     VELOCITY_MAX = np.ceil((np.max(original_mesh_w_models["vp"])+50)*1e-1)*1e1
-    print(f"Velocity min: {VELOCITY_MIN}, max: {VELOCITY_MAX}")
-    print(f"In mesh: {np.min(original_mesh_w_models['vp'])}, {np.max(original_mesh_w_models['vp'])}")
+    logger.info("Velocity min: %s, max: %s", VELOCITY_MIN, VELOCITY_MAX)
+    logger.info("In mesh: %s, %s", np.min(original_mesh_w_models['vp']), np.max(original_mesh_w_models['vp']))
 
     logger.info("Velocity min: %s, max: %s", VELOCITY_MIN, VELOCITY_MAX)
     logger.info("In mesh: %s, %s", np.min(original_mesh_w_models["vp"]), np.max(original_mesh_w_models["vp"]))

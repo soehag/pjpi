@@ -1,10 +1,11 @@
-##################################################
-# This is the init-file for the package 'regularisation'.
-# Author: Hagen Söding
-# Address: hagen.soeding@eaps.ethz.ch
-# Date: 2024/08/05
-##################################################
+"""
+regularisation package exports.
 
+This package contains a collection of regularisation operators and
+helpers used by the inversion managers. It exposes damping, smoothing,
+gradient- and anisotropic-regularisation implementations as well as a
+small linear-operator wrapper used to compose regularisation matrices.
+"""
 
 from .damping import DampingReferenceModel, DampingStepWidth
 from .smoothingpg import FirstOrderSmoothing, SecondOrderSmoothing

@@ -1,4 +1,5 @@
-"""Geophysical Gauss-Newton manager and helpers.
+"""
+Geophysical Gauss-Newton manager and helpers.
 
 This module contains `GaussNewtonGeophysical`, a specialization of
 `GaussNewtonCore` that configures and runs geophysical inversions using
@@ -42,7 +43,7 @@ class GaussNewtonGeophysical(GaussNewtonCore):
         mesh = self.mesh_info.mesh
         background_marker = np.min(mesh.cellMarkers())
         if not np.all(mesh.cellMarkers() == background_marker):
-            print("Some cells are not part of the inversion region.")
+            logger.warning("Some cells are not part of the inversion region.")
         self._region_of_interest = mesh_info.region_of_interest
 
         # Check if geophysical_data is a list or tuple
@@ -55,53 +56,53 @@ class GaussNewtonGeophysical(GaussNewtonCore):
         self.verbose = verbose
 
         if self.verbose:
-            print(f"No. of data sets: {self._number_of_data_sets}")
+            logger.info("No. of data sets: %s", self._number_of_data_sets)
             if self._number_of_data_sets == 0:
-                print("No data provided. Performing model fusion.")
+                logger.info("No data provided. Performing model fusion.")
 
         #* Check if single_model_regularisation is a list or tuple of lists
         if single_model_regularisation == []:
             self._single_model_regularisation = []
-            print("No single model regularisation provided.")
+            logger.info("No single model regularisation provided.")
         elif isinstance(single_model_regularisation, (list, tuple)):
             if np.all([isinstance(reg, (list, tuple)) for reg in single_model_regularisation]):
                 self._single_model_regularisation = single_model_regularisation
-                print(f"Single model regularisation provided")
+                logger.info("Single model regularisation provided")
             elif len(self._data) == 1:
                 self._single_model_regularisation = [single_model_regularisation]
             else:
-                print("Please provide a list of lists for single model regularisation.")
+                logger.error("Please provide a list of lists for single model regularisation.")
                 raise ValueError
         else:
-            print("Please provide a list of lists for single model regularisation.")
+            logger.error("Please provide a list of lists for single model regularisation.")
             raise ValueError
         
         # Check if dual_model_regularisation is a list
         if dual_model_regularisation == []:
             self._dual_model_regularisation = []
-            print("No dual model regularisation provided.")
+            logger.info("No dual model regularisation provided.")
         elif isinstance(dual_model_regularisation, (list, tuple)):
             self._dual_model_regularisation = dual_model_regularisation
-            print("Dual model regularisation provided.")
+            logger.info("Dual model regularisation provided.")
         else:
-            print("Please provide a list of dual model regularisation.")
+            logger.error("Please provide a list of dual model regularisation.")
             raise ValueError
         
         number_of_single_model_regularisation = 0
         for i, reg in enumerate(self._single_model_regularisation):
             number_of_single_model_regularisation += len(reg)
-            print(f"Number of single model regularisation for data set {i+1}: {len(reg)}")
+            logger.info("Number of single model regularisation for data set %s: %s", i+1, len(reg))
         self._number_of_single_model_regularisation = number_of_single_model_regularisation
 
         number_of_dual_model_regularisation = len(self._dual_model_regularisation)
-        print(f"Number of dual model regularisation: {number_of_dual_model_regularisation}")
+        logger.info("Number of dual model regularisation: %s", number_of_dual_model_regularisation)
         self._number_of_dual_model_regularisation = number_of_dual_model_regularisation
 
         # Set maximum number of iterations
         self._maximum_iterations = maximum_iterations
         self._current_iteration = 0
         if self.verbose:
-            print(f"Maximum iterations: {self._maximum_iterations}")
+            logger.info("Maximum iterations: %s", self._maximum_iterations)
 
         #* Initialis tracking dictionary
         self._tracking_dict = {
@@ -114,10 +115,10 @@ class GaussNewtonGeophysical(GaussNewtonCore):
                 initial_models = [mod.copy() for mod in initial_models]
             else:
                 initial_models = [initial_models.copy()]
-            print(f"No. of initial models: {len(initial_models)}")
+            logger.info("No. of initial models: %s", len(initial_models))
         else:
             initial_models = None
-            print("No initial models provided. Initial models will be initialised by the manager.")
+            logger.info("No initial models provided. Initial models will be initialised by the manager.")
             # TODO: Implement initialisation of models by the manager
             # TODO: Implement the creation of model info instances for each model
 
@@ -125,7 +126,7 @@ class GaussNewtonGeophysical(GaussNewtonCore):
         self._current_models = [mod.copy() for mod in self.initial_models]
 
         self._number_of_models = len(self._current_models)
-        print("GaussNewtonGeophysical initialized.")
+        logger.info("GaussNewtonGeophysical initialized.")
 
         # Set numerical scheme
         self.scheme = scheme
@@ -159,12 +160,12 @@ class GaussNewtonGeophysical(GaussNewtonCore):
             assert isinstance(decouple_regularisation[1], list), "Decouple regularisation must be a numpy array."
             assert all(isinstance(reg, (list, tuple)) for reg in decouple_regularisation[1]), "Decouple regularisation must be a list of lists."
             if self.verbose:
-                print("Decoupling regularisation provided.")
+                logger.info("Decoupling regularisation provided.")
         else:
             if self.verbose:
-                print("No decoupling regularisation provided.")
+                logger.info("No decoupling regularisation provided.")
         self.decouple_regularisation = decouple_regularisation
-        if self.verbose: print("Misfit history initialised.")
+        if self.verbose: logger.info("Misfit history initialised.")
 
         #* Set termination criterion
         self._terminate_on_chi2_decrease = 0.0
@@ -253,16 +254,16 @@ class GaussNewtonGeophysical(GaussNewtonCore):
 
     def run(self):
         """ Runs the Gauss-Newton inversion."""
-        print("----------Running Gauss-Newton inversion.----------")
+        logger.info("----------Running Gauss-Newton inversion.----------")
         if self._current_iteration == self._maximum_iterations:
-            print("----------Maximum number of iterations reached. Returning.----------")
+            logger.info("----------Maximum number of iterations reached. Returning.----------")
             return
         
         if np.any(self._model_update_bool is False):
-            print("Some models will not be updated.")
+            logger.warning("Some models will not be updated.")
 
         while self._current_iteration < self._maximum_iterations:
-            print(f"----------Processing iteration {self._current_iteration+1}----------")
+            logger.info("----------Processing iteration %s----------", self._current_iteration+1)
             start_time_iteration = time.time()
             # Create iteration dictionary for tracking if necessary
             if self._current_iteration not in self._tracking_dict:
@@ -274,7 +275,7 @@ class GaussNewtonGeophysical(GaussNewtonCore):
                 self._tracking_dict[self._current_iteration]["models"] = [mod.copy() for mod in self._current_models]
 
             if self.verbose:
-                print("----------Start: Calculating geophysical jacobians and rhs.----------")
+                logger.info("----------Start: Calculating geophysical jacobians and rhs.----------")
             start_time = time.time()
 
             #* Set up the geophysical inversion
@@ -284,11 +285,11 @@ class GaussNewtonGeophysical(GaussNewtonCore):
                 jacobian_inversion_data, rhs_data, data_misfit, data_misfit_list = None, None, None, None
 
             if self.verbose:
-                print(f"Time taken to calculate geophysical jacobians and rhs: {time.time()-start_time:.2f} seconds.")
-                print("----------End: Calculating geophysical jacobians and rhs.----------")
+                logger.info("Time taken to calculate geophysical jacobians and rhs: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating geophysical jacobians and rhs.----------")
 
             if self.verbose:
-                print("----------Start: Calculating model regularisation jacobians and rhs.----------")
+                logger.info("----------Start: Calculating model regularisation jacobians and rhs.----------")
             start_time = time.time()
 
             #* Set up the single model regularisation
@@ -306,8 +307,8 @@ class GaussNewtonGeophysical(GaussNewtonCore):
             assert self._number_of_data_sets>0 or self._number_of_single_model_regularisation>0 or self._number_of_dual_model_regularisation, "No data or regularisation provided."
 
             if self.verbose:
-                print(f"Time taken to calculate model regularisation jacobians and rhs: {time.time()-start_time:.2f} seconds.")
-                print("----------End: Calculating model regularisation jacobians and rhs.----------")
+                logger.info("Time taken to calculate model regularisation jacobians and rhs: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating model regularisation jacobians and rhs.----------")
 
             #* Save misfit values -  these are technically from the iteration before
             self._tracking_dict[self._current_iteration]["data_misfit"] = data_misfit_list
@@ -324,13 +325,13 @@ class GaussNewtonGeophysical(GaussNewtonCore):
                 if chi_curr is not None and chi_prev is not None and len(chi_curr) > 0:
                     chi2_percentage_decrease_list = self.percent_decrease_in_chi2(iteration=self._current_iteration)
                     if self.verbose:
-                        print(f"Chi2 percentage decrease: {chi2_percentage_decrease_list}")
+                        logger.info("Chi2 percentage decrease: %s", chi2_percentage_decrease_list)
                     if all([chi2_percentage_decrease < self.terminate_on_chi2_decrease for chi2_percentage_decrease in chi2_percentage_decrease_list]):
-                        print("Chi2 decrease criterion reached. Returning.")
+                        logger.info("Chi2 decrease criterion reached. Returning.")
                         break
 
             if self.verbose:
-                print("----------Start: Calculating full jacobian and rhs.----------")
+                logger.info("----------Start: Calculating full jacobian and rhs.----------")
             start_time = time.time()
 
             #* Setup the full Jacobian and response
@@ -351,14 +352,14 @@ class GaussNewtonGeophysical(GaussNewtonCore):
             full_rhs = np.concatenate(full_rhs_list, axis=0).flatten()
 
             if self.verbose:
-                print(f"Time taken to calculate full jacobian and rhs: {time.time()-start_time:.2f} seconds.")
-                print("----------End: Calculating full jacobian and rhs.----------")
+                logger.info("Time taken to calculate full jacobian and rhs: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating full jacobian and rhs.----------")
 
             if self.verbose:
-                print("----------Start: Solving linear system.----------")
+                logger.info("----------Start: Solving linear system.----------")
 
             if self.verbose:
-                print(f"Sparsity of Jacobian: {full_jacobian.nnz/(np.prod(full_jacobian.shape)):.2e}")
+                logger.info("Sparsity of Jacobian: %.2e", full_jacobian.nnz/(np.prod(full_jacobian.shape)))
 
             #* Solve the linear system
             model_update_small = self.solve_linear_system(
@@ -368,10 +369,10 @@ class GaussNewtonGeophysical(GaussNewtonCore):
             )
 
             if self.verbose:
-                print("----------End: Solving linear system.----------")
+                logger.info("----------End: Solving linear system.----------")
 
             if self.verbose:
-                print("----------Start: Calculating model updates.----------")
+                logger.info("----------Start: Calculating model updates.----------")
             start_time = time.time()
 
             #* Update the models
@@ -385,8 +386,8 @@ class GaussNewtonGeophysical(GaussNewtonCore):
             )
 
             if self.verbose:
-                print(f"Time taken to calculate model updates: {time.time()-start_time:.2f} seconds.")
-                print("----------End: Calculating model updates.----------")
+                logger.info("Time taken to calculate model updates: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating model updates.----------")
 
             #* Save updates and sizes
             if self._save_model_history:
@@ -401,11 +402,11 @@ class GaussNewtonGeophysical(GaussNewtonCore):
             self._current_iteration += 1
 
             if self.verbose:
-                print(f"Time taken for iteration {self._current_iteration}: {time.time()-start_time_iteration:.2f} seconds.")
-                print("----------End: Iteration.----------")
+                logger.info("Time taken for iteration %s: %.2f seconds.", self._current_iteration, time.time()-start_time_iteration)
+                logger.info("----------End: Iteration.----------")
 
         if self.verbose:
-            print("----------Start: Finalising inversion.----------")
+            logger.info("----------Start: Finalising inversion.----------")
         if self._current_iteration not in self._tracking_dict:
             self._tracking_dict[self._current_iteration] = {}
         # Save the final models
@@ -432,12 +433,12 @@ class GaussNewtonGeophysical(GaussNewtonCore):
 
         #* Adjust maximum iterations
         if self._current_iteration == self._maximum_iterations:
-            print("Maximum number of iterations reached.")
+            logger.info("Maximum number of iterations reached.")
         else:
-            print(f"Finished Gauss-Newton inversion after {self._current_iteration} iterations. Overwriting maximum iterations.")
+            logger.info("Finished Gauss-Newton inversion after %s iterations. Overwriting maximum iterations.", self._current_iteration)
             self._maximum_iterations = self._current_iteration
-        print("----------End: Finalising inversion.----------")
-        print("----------Gauss-Newton inversion finished.----------")
+        logger.info("----------End: Finalising inversion.----------")
+        logger.info("----------Gauss-Newton inversion finished.----------")
 
 # Jacobian and response functions
     def get_geophysical_jacobian_and_response(

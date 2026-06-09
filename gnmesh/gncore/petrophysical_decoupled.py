@@ -1,4 +1,5 @@
-"""Decoupled petrophysical Gauss-Newton manager.
+"""
+Decoupled petrophysical Gauss-Newton manager.
 
 Provides `GaussNewtonPetrophysicalDecoupled` for petrophysical inversion
 workflows that treat petrophysical and geophysical updates in a partially
@@ -79,7 +80,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
         # Set weights
         data_weight_list = [data.weight for data in geophysical_data_list]
-        logger.debug("Data weights: %s", data_weight_list)
+        logger.info("Data weights: %s", data_weight_list)
 
         self._number_of_datasets = len(geophysical_data_list)
 
@@ -218,7 +219,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         self._maximum_update_per_step = [(-np.inf, np.inf)] * (1 + self._number_of_datasets)
 
         self._regularisation_settings = inversion_settings
-        logger.debug("Regularisation settings: %s", self._regularisation_settings)
+        logger.info("Regularisation settings: %s", self._regularisation_settings)
 
         # Initialise the numerical solver by default
         self.num_solver = "cupy_sparse"
@@ -402,20 +403,20 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 if chi_curr is not None and chi_prev is not None and len(chi_curr) > 0:
                     chi2_percentage_decrease_list = self.percent_decrease_in_chi2(self._current_iteration)
                     if self.verbose:
-                        print(f"Chi2 percentage decrease: {chi2_percentage_decrease_list}")
+                        logger.info("Chi2 percentage decrease: %s", chi2_percentage_decrease_list)
                     if all([chi2_percentage_decrease < self._terminate_on_chi2_decrease for chi2_percentage_decrease in chi2_percentage_decrease_list]):
-                        print("Chi2 decrease criterion reached. Returning.")
+                        logger.info("Chi2 decrease criterion reached. Returning.")
                         break
 
             #* Recalculate the petro trust region -> Calculate the individual model updates
             if self._regularisation_settings["update_petro_trust_region"] and self._current_iteration >= self._regularisation_settings["update_after_iteration"]:
                 if self.verbose:
-                    print("----------Start: Update petro trust region.----------")
+                    logger.info("----------Start: Update petro trust region.----------")
                 n_petro_in_roi = np.sum(self.petrophysical_trust_region[self._region_of_interest])
                 start_time = time.time()
                 #* Calculate the individual model updates
                 if self._regularisation_settings["individual_updates_with_xg"]:
-                    print("----------Using XG for individual model updates.----------")
+                    logger.info("----------Using XG for individual model updates.----------")
                     individual_model_update_list = self.get_individual_model_updates_xg(
                         iwjacobian_data_list=iwjacobian_data_list,
                         iwrhs_data_list=iwrhs_data_list,
@@ -424,7 +425,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                         clip_update=True,
                     )
                 else:
-                    print("----------Not using XG for individual model updates.----------")
+                    logger.info("----------Not using XG for individual model updates.----------")
                     individual_model_update_list = self.get_individual_model_updates_wo_xg(
                         iwjacobian_data_list=iwjacobian_data_list,
                         iwrhs_data_list=iwrhs_data_list,
@@ -495,13 +496,12 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
                     if self.verbose:
                         n_petrophysical_in_roi_new = np.sum(self.petrophysical_trust_region[self._region_of_interest])
-                        print(f"Number of trusted cells in ROI changed from {n_petro_in_roi} to {n_petrophysical_in_roi_new}.")
-                        # print(f"Number of trusted cells: {np.sum(self.petrophysical_trust_region)} of {len(self.petrophysical_trust_region)}")
-                        print(f"Time taken for petrophysical trust region update: {time.time()-start_time:.2f} seconds")
-                        print("----------End: Petrophysical trust region update complete.----------")
+                        logger.info("Number of trusted cells in ROI changed from %s to %s.", n_petro_in_roi, n_petrophysical_in_roi_new)
+                        logger.info("Time taken for petrophysical trust region update: %.2f seconds", time.time()-start_time)
+                        logger.info("----------End: Petrophysical trust region update complete.----------")
 
             if self.verbose:
-                print("----------Start: Calculating the full jacobian and rhs.----------")
+                logger.info("----------Start: Calculating the full jacobian and rhs.----------")
             start_time = time.time()
 
             #* Get the full petrophysical jacobian and calculate update
@@ -560,7 +560,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 untrust_region_double = np.concatenate([~self.petrophysical_trust_region, ~self.petrophysical_trust_region])
 
                 if self._regularisation_settings["decouple_xg"]:
-                    print("Decoupling XG.")
+                    logger.info("Decoupling XG.")
                     xg_rows_to_remove = []
                     for row in range(xg_jacobian.shape[0]):
                         if np.any(xg_jacobian[row,trusted_region_double] != 0) and np.any(xg_jacobian[row,untrust_region_double]!= 0):
@@ -588,11 +588,11 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 full_rhs = np.concatenate([full_rhs, xg_rhs])
 
             if self.verbose:
-                print(f"Time taken to calculate the full jacobian and rhs: {time.time()-start_time:.2f} seconds.")
-                print("----------End: Calculating the full jacobian and rhs.----------")
+                logger.info("Time taken to calculate the full jacobian and rhs: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Calculating the full jacobian and rhs.----------")
 
             if self.verbose:
-                print("----------Start: Solving linear system.----------")
+                logger.info("----------Start: Solving linear system.----------")
             # Calculate the model update
             model_update_small = self.solve_linear_system(
                 A=full_jacobian,
@@ -610,10 +610,10 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 raise ValueError("Invalid scheme provided.")
 
             if self.verbose:
-                print("----------End: Solving linear system.----------")
+                logger.info("----------End: Solving linear system.----------")
 
             if self.verbose:
-                print("----------Start: Calculating model update.----------")
+                logger.info("----------Start: Calculating model update.----------")
             start_time = time.time()
 
             #* Update the model
@@ -626,8 +626,8 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
             )
 
             if self.verbose:
-                print(f"Time taken to calculate model update: {time.time()-start_time:.2f} seconds.")
-                print("----------End: Model update.----------")
+                logger.info("Time taken to calculate model update: %.2f seconds.", time.time()-start_time)
+                logger.info("----------End: Model update.----------")
 
             # Save updates and sizes
             self._tracking_dict[self._current_iteration]["petrophysical_trust_region"] = self.petrophysical_trust_region.copy()
@@ -636,11 +636,11 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
             self._tracking_dict[self._current_iteration]["final_model"] = self._current_model.copy()
             self._current_iteration += 1
             if self.verbose:
-                print(f"Time taken for iteration {self._current_iteration}: {time.time()-start_time_iteration:.2f} seconds.")
-                print("----------End: Iteration.----------")
+                logger.info("Time taken for iteration %s: %.2f seconds.", self._current_iteration, time.time()-start_time_iteration)
+                logger.info("----------End: Iteration.----------")
 
         if self.verbose:
-            print("----------Start: Finalising inversion.----------")
+            logger.info("----------Start: Finalising inversion.----------")
 
         if self._current_iteration not in self._tracking_dict:
             self._tracking_dict[self._current_iteration] = {}
@@ -678,12 +678,12 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
         #* Adjust maximum iterations
         if self._current_iteration == self._maximum_iterations:
-            print("Maximum number of iterations reached.")
+            logger.info("Maximum number of iterations reached.")
         else:
-            print(f"Finished Gauss-Newton inversion after {self._current_iteration} iterations. Overwriting maximum iterations.")
+            logger.info("Finished Gauss-Newton inversion after %s iterations. Overwriting maximum iterations.", self._current_iteration)
             self._maximum_iterations = self._current_iteration
-        print("----------End: Finalising inversion.----------")
-        print("Gauss-Newton inversion finished.")
+        logger.info("----------End: Finalising inversion.----------")
+        logger.info("Gauss-Newton inversion finished.")
 
     def get_individual_inversion_jacobians_and_rhs(self):
         """
@@ -870,7 +870,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
             for reg_no, reg in enumerate(self._single_model_regularisation[model_no]):
                 if self.verbose:
-                    print(f"Calculating regularisation jacobian and rhs for model {model_no}, regularisation {reg_no}.", flush=True)
+                    logger.info("Calculating regularisation jacobian and rhs for model %s, regularisation %s.", model_no, reg_no)
                 #* Get individual balancing factor for regularisation
                 jacobian = reg.get_jacobian(
                     physics_and_data=self.data,
@@ -913,7 +913,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
             #* Remove coupled rows if necessary [coupling between petro and non petro region] / [coupling between two regions]
             if self._regularisation_settings["decouple_regularisation_trustregion"]:
                 if model_no==0 and self.verbose:
-                    print("Decoupling regularisation between trusted and untrusted regions.")
+                    logger.info("Decoupling regularisation between trusted and untrusted regions.")
                 jacobian, rows_to_keep = self.remove_rows_coupling_trusted_untrusted(jacobian)
 
                 #* Remove the rows from the rhs
@@ -1071,12 +1071,10 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         rows_to_keep = np.setdiff1d(np.arange(matrix.shape[0]), rows_to_remove)
         matrix = matrix[rows_to_keep,:]
         if self.verbose:
-            print(
-                f"Prior rows to removal: {n_prior_rows} " +
-                f"Remaining rows: {matrix.shape[0]} " +
-                f"Zero rows: {len(zeros_rows_index)} " +
-                f"Coupled rows: {len(coupled_row_indices)}"
-                )
+            logger.info(
+                "Prior rows to removal: %s Remaining rows: %s Zero rows: %s Coupled rows: %s",
+                n_prior_rows, matrix.shape[0], len(zeros_rows_index), len(coupled_row_indices)
+            )
         return matrix, rows_to_keep
 
     def remove_coupling_from_regions(self, matrix, rhs, xg=False):
@@ -1111,7 +1109,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 ]
                 rows_to_remove.extend(coupled_row_indices_temp)
             rows_to_keep = np.setdiff1d(np.arange(matrix.shape[0]), rows_to_remove)
-            print(f"Removing {len(rows_to_remove)} coupled rows [region].")
+            logger.info("Removing %s coupled rows [region].", len(rows_to_remove))
             matrix = matrix[rows_to_keep]
             rhs = rhs[rows_to_keep]
         return matrix, rhs, rows_to_keep
@@ -1398,7 +1396,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         #* Update the petro model
         petro_model_update = model_update_tuple[0]
         if petro_model_update.size:
-            print("Clipping petrophysical model.")
+            logger.info("Clipping petrophysical model.")
             petro_model_update_clipped = self.clip_individual_model(
                 model_update=petro_model_update,
                 bounds=self._maximum_update_per_step[0]
@@ -1411,7 +1409,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         geo_model_update_list_clipped = []
         for model_no, geo_model_update in enumerate(geo_model_update_list):
             if geo_model_update.size:
-                print(f"Clipping geo model {model_no}.")
+                logger.info("Clipping geo model %s.", model_no)
                 geo_model_update_clipped = self.clip_individual_model(
                     model_update=geo_model_update,
                     bounds=self._maximum_update_per_step[model_no+1]
@@ -1445,12 +1443,9 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         if self.verbose and model_update.size:
             minimum_update_cell = np.argmin(model_update)
             maximum_update_cell = np.argmax(model_update)
-            print(
-                "Updates before clipping:" +
-                f"Size: {np.linalg.norm(model_update):.2e}. " +
-                f"Minimum: {model_update[minimum_update_cell]:.2e}." +
-                f"Maximum: {model_update[maximum_update_cell]:.2e}." +
-                f"Median: {np.median(model_update):.2e}."
+            logger.info(
+                "Updates before clipping: Size: %.2e. Minimum: %.2e. Maximum: %.2e. Median: %.2e.",
+                np.linalg.norm(model_update), model_update[minimum_update_cell], model_update[maximum_update_cell], np.median(model_update)
             )
 
         #* Decide if clipping is required
@@ -1463,9 +1458,9 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         if any(update_too_big_vector):
             clipping_required = True
         if self.verbose and clipping_required:
-            print(f"Too small: #{np.sum(update_too_small_vector)}, too big: #{np.sum(update_too_big_vector)}. Clipping required.")
+            logger.info("Too small: #%s, too big: #%s. Clipping required.", np.sum(update_too_small_vector), np.sum(update_too_big_vector))
         if not clipping_required and self.verbose:
-            print("No clipping required.")
+            logger.info("No clipping required.")
 
         #* Clip the update
         if clipping_required:
@@ -1473,12 +1468,9 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
             if self.verbose and update_vector_clipped.size:
                 minimum_update_cell = np.argmin(update_vector_clipped)
                 maximum_update_cell = np.argmax(update_vector_clipped)
-                print(
-                    "Updates after clipping:" +
-                    f"Size: {np.linalg.norm(update_vector_clipped):.2e}. " +
-                    f"Minimum: {update_vector_clipped[minimum_update_cell]:.2e} at cell {minimum_update_cell}. " +
-                    f"Maximum: {update_vector_clipped[maximum_update_cell]:.2e} at cell {maximum_update_cell}. " +
-                    f"Median: {np.median(update_vector_clipped):.2e}."
+                logger.info(
+                    "Updates after clipping: Size: %.2e. Minimum: %.2e at cell %s. Maximum: %.2e at cell %s. Median: %.2e.",
+                    np.linalg.norm(update_vector_clipped), update_vector_clipped[minimum_update_cell], minimum_update_cell, update_vector_clipped[maximum_update_cell], maximum_update_cell, np.median(update_vector_clipped)
                 )
         else:
             update_vector_clipped = model_update
@@ -1570,7 +1562,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 # Use the area of the component
                 size = np.sum([self.mesh_info.cell_neighbour_info[comp].cell_area for comp in component])
                 if self.verbose:
-                    print(f"Component has {len(component)} cells with area {size:.2f}.")
+                    logger.info("Component has %s cells with area %.2f.", len(component), size)
             else:
                 raise ValueError("Criterion must be either 'count' or 'area'.")
 
@@ -1581,9 +1573,9 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
         n_cells_to_untrusted_new = np.sum(~new_petrophysical_trust_region) - np.sum(~self.petrophysical_trust_region)
         if self.verbose:
-            print(
-                f"Rejected changing cells to untrusted for {np.sum(n_cells_to_untrusted_old) - np.sum(n_cells_to_untrusted_new)} cells from the petrophysical trust region [untrusted too small]. " +
-                f"Remaining cells: {np.sum(new_petrophysical_trust_region)}."
+            logger.info(
+                "Rejected changing cells to untrusted for %s cells from the petrophysical trust region [untrusted too small]. Remaining cells: %s.",
+                np.sum(n_cells_to_untrusted_old) - np.sum(n_cells_to_untrusted_new), np.sum(new_petrophysical_trust_region)
             )
 
         connected_components_trusted, _, _ = self.connected_components_from_meshinfo_petrophysical_trust_region(
@@ -1601,7 +1593,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 # Use the area of the component
                 size = np.sum([self.mesh_info.cell_neighbour_info[comp].cell_area for comp in component])
                 if self.verbose:
-                    print(f"Component has {len(component)} cells with area {size:.2f}.")
+                    logger.info("Component has %s cells with area %.2f.", len(component), size)
             else:
                 raise ValueError("Criterion must be either 'count' or 'area'.")
             
@@ -1611,14 +1603,14 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
         n_cells_trusted_new = np.sum(new_petrophysical_trust_region)
         if self.verbose:
-            print(
-                f"Rejected keeping cells trusted for {n_cells_trusted_old - n_cells_trusted_new} cells from the petrophysical trust region [trusted too small]. " +
-                f"Remaining cells: {np.sum(new_petrophysical_trust_region)}."
+            logger.info(
+                "Rejected keeping cells trusted for %s cells from the petrophysical trust region [trusted too small]. Remaining cells: %s.",
+                n_cells_trusted_old - n_cells_trusted_new, np.sum(new_petrophysical_trust_region)
             )
         if self.verbose:
-            print(
-                f"Removed {np.sum(old_petrophysical_trust_region) - np.sum(new_petrophysical_trust_region)} cells from the petrophysical trust region [trusted too small]. " +
-                f"Remaining cells: {np.sum(new_petrophysical_trust_region)}."
+            logger.info(
+                "Removed %s cells from the petrophysical trust region [trusted too small]. Remaining cells: %s.",
+                np.sum(old_petrophysical_trust_region) - np.sum(new_petrophysical_trust_region), np.sum(new_petrophysical_trust_region)
             )
 
         self.petrophysical_trust_region = new_petrophysical_trust_region.copy()
@@ -1847,9 +1839,9 @@ def update_petro_from_diverging_model_updates(list_models, list_model_updates, c
     significant = significant_model_1 | significant_model_2
     
     if not np.any(significant):
-        print("No model updates are significant.")
-        print(f"Maximum model update 1: {np.max(np.abs(list_model_updates[0]))}.")
-        print(f"Maximum model update 2: {np.max(np.abs(list_model_updates[1]))}.")
+        logger.info("No model updates are significant.")
+        logger.info("Maximum model update 1: %s.", np.max(np.abs(list_model_updates[0])))
+        logger.info("Maximum model update 2: %s.", np.max(np.abs(list_model_updates[1])))
 
     #*
     distrusted_cell_from_update = np.logical_and(
@@ -1916,9 +1908,9 @@ def update_petro_from_large_difference_in_model_updates(list_models, list_model_
         raise ValueError("Invalid difference provided.")
     
     if not np.any(significant):
-        print("No model updates are significant.")
-        print(f"Maximum model update 1: {np.max(np.abs(list_model_updates[0]))}.")
-        print(f"Maximum model update 2: {np.max(np.abs(list_model_updates[1]))}.")
+        logger.info("No model updates are significant.")
+        logger.info("Maximum model update 1: %s.", np.max(np.abs(list_model_updates[0])))
+        logger.info("Maximum model update 2: %s.", np.max(np.abs(list_model_updates[1])))
 
     distrusted_cell_from_update = significant
 

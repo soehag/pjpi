@@ -1,22 +1,30 @@
 """
-Mesh bookkeeping utilities used by the gradient and Hessian demos.
+Mesh bookkeeping utilities.
 
-The module provides:
+This module provides helpers for building and storing neighbour
+information on unstructured meshes. It includes lightweight containers
+such as `CellNeighbourInfo` and `MeshInfo`, plus utility functions for
+triangle area computation and neighbourhood selection used by gradient
+and Hessian routines.
 
-* CellNeighbourInfo: Store local cell geometry and Taylor-system matrices.
-* MeshInfo: Build and manage neighbour information for all cells in a mesh.
-* Helper functions for triangle area and neighbourhood selection.
-
-Author: Hagen Söding
-Affiliation: ETH Zürich
-Email: hagen.soeding@eaps.ethz.ch
+Functions
+---------
+cell_area_triangle
+    Compute the geometric area of a triangle cell.
+distance_to_neighbour_list_for_cell
+    Return indices of cells within a distance threshold from a cell.
+distance_to_neighbour_list_for_mesh
+    Return neighbour lists for all cells in a mesh.
 """
 
 
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
+import logging
 from pygimli.viewer.mpl import drawModel, drawMeshBoundaries
+
+logger = logging.getLogger(__name__)
 
 # Calculate area from a pyGIMLi triangle cell.
 def cell_area_triangle(cell):
@@ -182,7 +190,7 @@ class CellNeighbourInfo:
         dimension (int): The dimension of the mesh.
         cell_area_function (function): The function to calculate the area of the cell.
         neighbour_function (function): The function to calculate the neighbours of the cell.
-        verbose (bool): If True, print the progress.
+        verbose (bool): If True, output the progress.
         """
         # Get the cell number
         self._cell_number = cell.id()
@@ -207,9 +215,7 @@ class CellNeighbourInfo:
                     self._neighbour_cells.append(cell.neighborCell(j).id())
                 except AttributeError:
                     if verbose:
-                        print(f"Cell {cell.id()} has no neighbour at position {j}")
-            # self.neighbour_cells = [cell.neighborCell(j).id() for
-            #                         j in range(cell.neighborCellCount())]
+                        logger.info("Cell %s has no neighbour at position %s", cell.id(), j)
 
         # Lazily populated matrices used by the Taylor-based solvers.
         self._distance_matrix = None
@@ -273,8 +279,8 @@ class CellNeighbourInfo:
                 ) @ self._distance_matrix.T
             except np.linalg.LinAlgError:
                 self._distance_matrix_gn_taylor1 = None
-                print("Singular matrix for cell", self.cell_number)
-                print("GN Taylor 1 matrix not calculated - try increasing the number of neighbours")
+                logger.warning("Singular matrix for cell %s", self.cell_number)
+                logger.info("GN Taylor 1 matrix not calculated - try increasing the number of neighbours")
 
     @property
     def distance_matrix_gn_taylor2(self):
@@ -318,8 +324,8 @@ class CellNeighbourInfo:
                     )
             except np.linalg.LinAlgError:
                 self._distance_matrix_gn_taylor2 = None
-                print("Singular matrix for cell", self.cell_number)
-                print("GN Taylor 2 matrix not calculated - try increasing the number of neighbours")
+                logger.warning("Singular matrix for cell %s", self.cell_number)
+                logger.info("GN Taylor 2 matrix not calculated - try increasing the number of neighbours")
 
     def get_gradient_mesh_sensitivities(self, order=1):
         """
@@ -420,10 +426,10 @@ class MeshInfo:
         cell_markers = np.array(mesh.cellMarkers())
         smallest_cell_marker = np.min(cell_markers)
         if np.all(cell_markers == smallest_cell_marker):
-            print("All cells have the same marker - region of interest is the whole mesh")
+            logger.info("All cells have the same marker - region of interest is the whole mesh")
             default_region_of_interest = np.array([True] * len(mesh.cells()))
         else:
-            print("Cells have different markers - region of interest are cells with non minimum marker")
+            logger.info("Cells have different markers - region of interest are cells with non minimum marker")
             default_region_of_interest = np.array(cell_markers != smallest_cell_marker)
         self.region_of_interest = default_region_of_interest
 
@@ -435,7 +441,7 @@ class MeshInfo:
 
         for num, cell in enumerate(self._mesh.cells()):
             if num % five_percent_cells == 0:
-                print(f"Progress at {5*counter}% - Calculating cell {num}/{no_of_cells}")
+                logger.info(f"Progress at {5*counter}% - Calculating cell {num}/{no_of_cells}")
                 counter += 1
             cell_neighbour_info = CellNeighbourInfo(
                 cell,

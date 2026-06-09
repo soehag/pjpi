@@ -125,7 +125,7 @@ def parse_mesh_to_resistivity_model(
         )
     else:
         saturation_model = mesh["sat"]
-        logger.debug("Saturation available in mesh - skipping saturation parsing")
+        logger.info("Saturation available in mesh - skipping saturation parsing")
     
     n_cells = mesh.cellCount()
     resistivity_model = np.zeros(n_cells)
@@ -192,7 +192,7 @@ def parse_mesh_to_vp_model(
         )
     else:
         saturation_model = mesh["saturation"]
-        logger.debug("Saturation available in mesh - skipping saturation parsing")
+        logger.info("Saturation available in mesh - skipping saturation parsing")
     
     n_cells = mesh.cellCount()
     vp_model = np.zeros(n_cells)
