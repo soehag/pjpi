@@ -25,6 +25,3 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["gnmesh*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]

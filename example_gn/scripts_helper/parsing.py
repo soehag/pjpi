@@ -9,8 +9,11 @@ The functions expect transformation objects conforming to the
 implement a `.forward(x)` method that maps saturation -> physical value.
 """
 
+import logging
 import numpy as np
 import pygimli as pg
+
+logger = logging.getLogger(__name__)
 
 # Region markers used in the example geometry
 MARKER_CAPROCK = 0
@@ -122,7 +125,7 @@ def parse_mesh_to_resistivity_model(
         )
     else:
         saturation_model = mesh["sat"]
-        print("Saturation available in mesh - skipping saturation parsing")
+        logger.debug("Saturation available in mesh - skipping saturation parsing")
     
     n_cells = mesh.cellCount()
     resistivity_model = np.zeros(n_cells)
@@ -178,7 +181,7 @@ def parse_mesh_to_vp_model(
         P-wave velocity model.
     """
 
-    #* First add saturation model to mesh if not already present
+    # First add saturation model to mesh if not already present
     if not "saturation" in mesh.dataKeys():
         saturation_model = parse_mesh_to_saturation_model(
             mesh=mesh,
@@ -189,7 +192,7 @@ def parse_mesh_to_vp_model(
         )
     else:
         saturation_model = mesh["saturation"]
-        print("Saturation available in mesh - skipping saturation parsing")
+        logger.debug("Saturation available in mesh - skipping saturation parsing")
     
     n_cells = mesh.cellCount()
     vp_model = np.zeros(n_cells)

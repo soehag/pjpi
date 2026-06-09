@@ -69,13 +69,8 @@ def first_order_smoothing_squared_gradient_phi(physics_and_data, model_info, mod
     numpy.ndarray
         The right-hand side of the smoothing operator with respect to the model.
     """
-    # jacobian = first_order_smoothing_squared_gradient_jacobian(physics_and_data, model_info, order=order)
-    # if model_transformation_regularisation is not None:
-    #     model_vector = model_transformation_regularisation.forward(model_info.model)
-    # else:
-    #     model_vector = model_info.model
-    # return jacobian @ model_vector
-    
+    # Legacy approach (explicit jacobian @ model_vector) removed. Current
+    # implementation computes the spatial gradient and forms a norm-based phi.
     if model_transformation_regularisation is not None:
         model_vector = model_transformation_regularisation.forward(model_info.model)
     else:
@@ -165,13 +160,8 @@ def first_order_smoothing_gradient_phi(physics_and_data, model_info, model_trans
     numpy.ndarray
         The right-hand side of the smoothing operator with respect to the model.
     """
-    # jacobian = first_order_smoothing_squared_gradient_jacobian(physics_and_data, model_info, order=order)
-    # if model_transformation_regularisation is not None:
-    #     model_vector = model_transformation_regularisation.forward(model_info.model)
-    # else:
-    #     model_vector = model_info.model
-    # return jacobian @ model_vector
-
+    # Legacy explicit jacobian-based phi removed; compute spatial gradient
+    # and scale by cell areas instead.
     area_of_cells = np.array(
         [cni.cell_area for cni in model_info.mesh_info.cell_neighbour_info]
     )

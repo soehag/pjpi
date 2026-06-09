@@ -1,6 +1,17 @@
+"""Plotting helper utilities for example GN scripts.
+
+This module provides convenience functions to visualize ERT and
+traveltime data in matrix forms and to compute simple diagnostics like
+chi-squared. Functions are intentionally lightweight helpers used by
+examples and notebooks.
+"""
+
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sP
+
+logger = logging.getLogger(__name__)
 
 
 def gather_datamatrices_by_offset(data_ert):
@@ -33,7 +44,7 @@ def gather_datamatrices_by_offset(data_ert):
 
     unique_offset_values = np.unique(np.concatenate((offset_A, offset_B)))
     unique_offset_values.sort()
-    print(f"Unique offset values: {unique_offset_values}")
+    logger.debug("Unique offset values: %s", unique_offset_values)
 
     data_matrix_list = []
 
@@ -187,14 +198,14 @@ def data_to_chi_squared(observed, simulated, data_field, err_field="err", regu=1
 def plot_misfits_from_results_dict(results_dict, data_misfit="chi_squared", fields_to_plot=None):
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     iterations = np.arange(0, results_dict["iterations"]+1)+1
-    print("Found iterations: ", iterations)
+    logger.debug("Found iterations: %s", iterations)
 
     number_of_methods = len(results_dict["data_misfit"][0])
-    print("Number of methods: ", number_of_methods)
+    logger.debug("Number of methods: %s", number_of_methods)
 
     if fields_to_plot is None:
         fields_to_plot = ["data", "single", "double"]
-    print("Fields to plot: ", fields_to_plot)
+    logger.debug("Fields to plot: %s", fields_to_plot)
 
     assert data_misfit in ["data", "chi_squared"], "Data misfit must be either 'data' or 'chi_squared'"
     if data_misfit == "data":

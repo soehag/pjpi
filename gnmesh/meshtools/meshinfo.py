@@ -418,13 +418,14 @@ class MeshInfo:
 
         # Region of interest defaults to the non-minimum cell markers.
         cell_markers = np.array(mesh.cellMarkers())
-        smallest_cell_marker= np.min(cell_markers)
+        smallest_cell_marker = np.min(cell_markers)
         if np.all(cell_markers == smallest_cell_marker):
             print("All cells have the same marker - region of interest is the whole mesh")
-            self._region_of_interest = np.array([True]*len(mesh.cells()))
+            default_region_of_interest = np.array([True] * len(mesh.cells()))
         else:
             print("Cells have different markers - region of interest are cells with non minimum marker")
-            self._region_of_interest = np.array(cell_markers != smallest_cell_marker)
+            default_region_of_interest = np.array(cell_markers != smallest_cell_marker)
+        self.region_of_interest = default_region_of_interest
 
         # Build the per-cell neighbourhood objects.
         cell_neighbour_info_list = []
@@ -475,6 +476,26 @@ class MeshInfo:
     def region_of_interest(self):
         """Boolean mask selecting the region of interest."""
         return self._region_of_interest
+
+    @region_of_interest.setter
+    def region_of_interest(self, region_of_interest):
+        """Set the region-of-interest mask after validating shape and length.
+
+        Parameters:
+        region_of_interest (array-like): Boolean-like vector with one entry per cell.
+
+        Raises:
+        ValueError: If the input is not one-dimensional or does not match the
+            number of mesh cells.
+        """
+        region_of_interest = np.asarray(region_of_interest)
+        if region_of_interest.ndim != 1:
+            raise ValueError("Region of interest must be a one-dimensional vector")
+        if len(region_of_interest) != len(self.mesh.cells()):
+            raise ValueError(
+                "Region of interest must have the same length as the number of mesh cells"
+            )
+        self._region_of_interest = region_of_interest.astype(bool)
 
     @property
     def neighbour_function(self):

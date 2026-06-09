@@ -132,7 +132,7 @@ class LogarithmicBarrierTransformationLessThan:
 class LogarithmicBarrierTransformationTwoSided:
     """Map an open interval to the real line with logarithmic barriers at both ends."""
 
-    def __init__(self, lower_barrier, upper_barrier, eps_barrier=1e-6, eps_exp=10, derivative="numeric"):
+    def __init__(self, lower_barrier, upper_barrier, eps_barrier=1e-6, eps_exp=30, derivative="numeric"):
         self._lower_barrier = lower_barrier
         self._upper_barrier = upper_barrier
         assert lower_barrier < upper_barrier, "Lower barrier must be smaller than upper barrier."
@@ -150,10 +150,11 @@ class LogarithmicBarrierTransformationTwoSided:
         if np.any(np.abs(x) > self._eps_exp):
             # Clip x to avoid overflow in np.exp(x).
             print("Warning: Inverse of logarithmic barrier transformation is clipped")
-            np.clip(x, a_min=-self._eps_exp, a_max=self._eps_exp, out=x)
+
+        x_clipped = np.clip(x, a_min=-self._eps_exp, a_max=self._eps_exp)
 
         # Clip the result to keep it strictly inside the admissible interval and avoid boundary issues.
-        unclipped_backward = (self._lower_barrier + self._upper_barrier * np.exp(x)) / (1 + np.exp(x))
+        unclipped_backward = (self._lower_barrier + self._upper_barrier * np.exp(x_clipped)) / (1 + np.exp(x_clipped))
         if np.any(unclipped_backward < self._lower_barrier + self._eps_barrier):
             print("Warning: Inverse of logarithmic barrier transformation is clipped from below.")
         if np.any(unclipped_backward > self._upper_barrier - self._eps_barrier):
@@ -178,12 +179,8 @@ class LogarithmicBarrierTransformationTwoSided:
 
     def derivative_forward_analytic(self, x):
         """ Derivative of the logarithmic barrier transformation for lower_barrier < x < upper_barrier. """
-        sign_lower = np.sign(x - self._lower_barrier)
-        sign_upper = np.sign(self._upper_barrier - x)
-        absolute_lower = np.abs(x - self._lower_barrier)
-        absolute_upper = np.abs(self._upper_barrier - x)
-        return sign_lower / (absolute_lower + self._eps_barrier) + sign_upper / (absolute_upper + self._eps_barrier)
-
+        return 1.0 / (x - self._lower_barrier) + 1.0 / (self._upper_barrier - x)
+    
     def derivative_forward_numeric(self, x):
         """ Numerical derivative of the logarithmic barrier transformation for lower_barrier < x < upper_barrier. """
         # If x is closer to the lower barrier than the upper barrier, then add eps to x.
@@ -206,8 +203,8 @@ class LogarithmicBarrierTransformationTwoSided:
         if np.any(np.abs(x) > self._eps_exp):
             # Clip x to avoid overflow in np.exp(x).
             print("Warning: Inverse of logarithmic barrier transformation is clipped")
-            np.clip(x, a_min=-self._eps_exp, a_max=self._eps_exp, out=x)
-        return (np.exp(x) * (self._upper_barrier - self._lower_barrier))/(1 + np.exp(x))**2
+            x_clipped = np.clip(x, a_min=-self._eps_exp, a_max=self._eps_exp)
+        return (np.exp(x_clipped) * (self._upper_barrier - self._lower_barrier))/(1 + np.exp(x_clipped))**2
         
     def derivative_backward_numeric(self, x):
         """ Numerical derivative of the inverse of the logarithmic barrier transformation for lower_barrier < x < upper_barrier. """
@@ -215,7 +212,7 @@ class LogarithmicBarrierTransformationTwoSided:
         # If x is closer to the upper barrier than the lower barrier, then subtract eps from x.
         # This function works vectorized and avoids stepping outside the interval.
 
-        forward_difference_indices = np.abs(x - self._lower_barrier) < np.abs(self._upper_barrier - x)
+        forward_difference_indices = x < 0
         backward_difference_indices = ~forward_difference_indices
 
         forward_difference = np.zeros_like(x)

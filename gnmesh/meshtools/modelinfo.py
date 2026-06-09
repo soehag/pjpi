@@ -386,7 +386,7 @@ class ModelInfoMixedGeoPetro:
             inversion_transformation_petro=tF.MultiplicativeTransformation(1),
             inversion_transformation_list_geo=None,
             plotting_transformation=tF.MultiplicativeTransformation(1),
-            petro_trust_region=None
+            petrophysical_trust_region=None
     ):
 
         if transformation_list_petro is None:
@@ -411,10 +411,10 @@ class ModelInfoMixedGeoPetro:
 
         self._plotting_transformation = plotting_transformation
 
-        if petro_trust_region is not None:
-            self._petro_trust_region = petro_trust_region
+        if petrophysical_trust_region is not None:
+            self._petrophysical_trust_region = petrophysical_trust_region
         else:
-            self._petro_trust_region = np.ones(self._mesh_info.mesh.cellCount(), dtype=bool)
+            self._petrophysical_trust_region = np.ones(self._mesh_info.mesh.cellCount(), dtype=bool)
 
         self.model = (model_petro, model_list_geo)
 
@@ -425,7 +425,7 @@ class ModelInfoMixedGeoPetro:
 
     def set_model(self, model_list_tuple):
         # Validate the input layout before storing any state.
-        number_of_untrusted_cells = np.sum(~self._petro_trust_region)
+        number_of_untrusted_cells = np.sum(~self._petrophysical_trust_region)
 
         assert len(model_list_tuple) == 2, "Model must be a tuple of (model_petro, model_list_geo)"
         model_petro, model_list_geo = model_list_tuple
@@ -459,8 +459,8 @@ class ModelInfoMixedGeoPetro:
         model_list_geo = []
         for i, model_geo in enumerate(self._model_list_geo_small):
             model_temp = np.ones(self._mesh_info.mesh.cellCount())
-            model_temp[self._petro_trust_region] = self._transformation_list_petro[i].forward(self.model_petro)
-            model_temp[~self._petro_trust_region] = model_geo
+            model_temp[self._petrophysical_trust_region] = self._transformation_list_petro[i].forward(self.model_petro)
+            model_temp[~self._petrophysical_trust_region] = model_geo
             model_list_geo.append(model_temp)
         return model_list_geo
 
@@ -474,11 +474,11 @@ class ModelInfoMixedGeoPetro:
         """Transformed model property. If transformation is set,
         the model is transformed and the untransformed model is stored"""
         
-        transformed_petro_model = self._inversion_transformation_petro.forward(self._model_petro[self._region_of_interest[self._petro_trust_region]])
+        transformed_petro_model = self._inversion_transformation_petro.forward(self._model_petro[self._region_of_interest[self._petrophysical_trust_region]])
 
         transformed_geo_model_list = []
         for i, model_geo in enumerate(self._model_list_geo_small):
-            transformed_geo_model = self._inversion_transformation_list_geo[i].forward(model_geo[self._region_of_interest[~self._petro_trust_region]])
+            transformed_geo_model = self._inversion_transformation_list_geo[i].forward(model_geo[self._region_of_interest[~self._petrophysical_trust_region]])
             transformed_geo_model_list.append(transformed_geo_model)
         return (transformed_petro_model, transformed_geo_model_list)
 
@@ -503,34 +503,34 @@ class ModelInfoMixedGeoPetro:
         the model is transformed and the transformed model gradient is stored"""
         transformed_petro_model_gradient, transformed_geo_model_gradient_list = self.transformed_model_gradient
         # Chain-rule correction from geophysical to petrophysical parameterisation.
-        petro_transformation_gradient = self._transformation_list_petro[method_number].deriv(
-            self._model_petro[self._region_of_interest[self._petro_trust_region]]
+        petro_transformation_gradient = self._transformation_list_petro[method_number].derivative_forward(
+            self._model_petro[self._region_of_interest[self._petrophysical_trust_region]]
         )
         double_transformed_petro_gradient = transformed_petro_model_gradient * petro_transformation_gradient
         return_vector = np.zeros(np.sum(self._region_of_interest), dtype=float)
-        return_vector[self._petro_trust_region[self._region_of_interest]] = double_transformed_petro_gradient
-        return_vector[~self._petro_trust_region[self._region_of_interest]] = transformed_geo_model_gradient_list[method_number]
+        return_vector[self._petrophysical_trust_region[self._region_of_interest]] = double_transformed_petro_gradient
+        return_vector[~self._petrophysical_trust_region[self._region_of_interest]] = transformed_geo_model_gradient_list[method_number]
         return return_vector
 
     @property
-    def petro_trust_region(self):
+    def petrophysical_trust_region(self):
         """Petrophysical trust region property"""
-        return self._petro_trust_region
+        return self._petrophysical_trust_region
 
-    @petro_trust_region.setter
-    def petro_trust_region(self, petro_trust_region):
+    @petrophysical_trust_region.setter
+    def petrophysical_trust_region(self, petro_trust_region):
         """Set petrophysical trust region property"""
-        if self.petro_trust_region is not None:
+        if self.petrophysical_trust_region is not None:
             if len(petro_trust_region) != self._mesh_info.mesh.cellCount():
                 raise ValueError("Length of petro_trust_region must match length of mesh")
             if not isinstance(petro_trust_region, np.ndarray):
                 raise ValueError("petro_trust_region must be a numpy array")
-            if np.any(np.logical_and(petro_trust_region, ~self._petro_trust_region)):
+            if np.any(np.logical_and(petro_trust_region, ~self._petrophysical_trust_region)):
                 raise ValueError("petro_trust_region must not contain cells that have been distrusted before")
 
         # Re-split the current model into the new trust-region layout.
         model_list_geo = self.model_list_geo
-        self._petro_trust_region = petro_trust_region
+        self._petrophysical_trust_region = petro_trust_region
 
         new_petro_model = self._transformation_list_petro[0].backward(model_list_geo[0][petro_trust_region])
         new_geo_model_list = []
@@ -577,6 +577,6 @@ class ModelInfoMixedGeoPetro:
             inversion_transformation_petro=self._inversion_transformation_petro,
             inversion_transformation_list_geo=self._inversion_transformation_list_geo,
             plotting_transformation=self._plotting_transformation,
-            petro_trust_region=self.petro_trust_region.copy()
+            petrophysical_trust_region=self.petrophysical_trust_region.copy()
         )
         return model_new

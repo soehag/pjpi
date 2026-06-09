@@ -1,0 +1,69 @@
+
+pjpi — Geophysical / Petrophysical Inversion Utilities
+=====================================================
+
+Short description
+-----------------
+`pjpi` is a Python library for coupled geophysical and petrophysical
+inversions using Gauss‑Newton based workflows. It provides utilities for
+mesh and model handling, regularisation operators, and interfaces to
+`pygimli` forward operators (ERT, traveltime, etc.), plus example scripts
+and helper functions for demonstrations and research.
+
+Features
+--------
+- Managers for geophysical and petrophysical inversion workflows
+- Utilities for mesh and model processing (`gnmesh.meshtools`)
+- Multiple regularisers (damping, spatial smoothing, X-gradient)
+- Example/demo scripts under `example_gn/` including `run_all_inversions.py`
+- Integration with `pygimli` forward operators
+
+Quickstart — Conda-based installation
+-------------------------------------
+Recommended: create and use a Conda environment (helps with `pygimli` and
+other compiled dependencies).
+
+Create environment and install dependencies:
+
+```bash
+# create environment (choose python version appropriate for your system)
+conda create -n pjpi python=3.11 -y
+conda activate pjpi
+
+# Install core dependencies from conda-forge (pygimli is available there)
+conda install -c conda-forge numpy scipy pygimli matplotlib -y
+
+# Install package in editable/development mode (from project root)
+pip install -e .
+```
+
+If you prefer to use `mamba` for faster installs, replace `conda install`
+with `mamba install`.
+
+Example: run all example inversions
+----------------------------------
+Run the example inversion scripts sequentially (non-parallel):
+
+```bash
+# from project root
+python example_gn/scripts_inversion/run_all_inversions.py
+
+# or run and stop on first error
+./example_gn/scripts_inversion/run_all_inversions.py --stop
+```
+
+Contribution
+------------
+Contributions are welcome. For larger changes, open an issue first and
+create Pull Requests with clear descriptions and tests. Follow the project
+style: library code should use `logging` rather than `print` for messages.
+
+Citation & contact
+------------------
+See `CITATION.cff` for citation instructions. For questions or major
+changes, open an issue or contact the maintainers via GitHub.
+
+License
+-------
+This repository includes a `LICENSE` file at the project root; use that
+license when publishing.
