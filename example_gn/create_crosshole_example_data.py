@@ -726,18 +726,18 @@ sensor_positions_ert = ert_scheme.sensorPositions()
 first_configuration = np.where(
     (a == 1) & (b == 1 + ELECTRODE_NUMBER) & (m == 2) & (n == 2 + ELECTRODE_NUMBER)
 )[0][0]
-    logger.info("First configuration indices: %s", first_configuration)
+logger.info("First configuration indices: %s", first_configuration)
 
 second_configuration = np.where(
     (a == 11) & (b == 11 + ELECTRODE_NUMBER) & (m == 13) & (n == 13 + ELECTRODE_NUMBER)
 )[0][0]
-    logger.info("Second configuration indices: %s", second_configuration)
+logger.info("Second configuration indices: %s", second_configuration)
 
 
 third_configuration = np.where(
     (a == 21) & (b == 21 + ELECTRODE_NUMBER) & (m == 24) & (n == 24 + ELECTRODE_NUMBER)
 )[0][0]
-    logger.info("Third configuration indices: %s", third_configuration)
+logger.info("Third configuration indices: %s", third_configuration)
 
 # First plot ERT scheme
 configurations_to_plot = [first_configuration, second_configuration, third_configuration]
