@@ -132,7 +132,7 @@ class GaussNewtonGeophysical(GaussNewtonCore):
         self.scheme = scheme
 
         # Set scaling
-        self.scaling = "column_sum"
+        self.scaling = "column_sum_l1"
 
         # Intialise misfit history
         self.save_model_history = save_model_history

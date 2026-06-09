@@ -106,7 +106,7 @@ class GaussNewtonPetrophysical(GaussNewtonCore):
         self.scheme = scheme
 
         # Set scaling
-        self.scaling = "column_sum"
+        self.scaling = "column_sum_l1"
 
         # Set maximum update per step
         self._maximum_update_per_step = [-np.inf, np.inf]
