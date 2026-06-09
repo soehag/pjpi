@@ -29,6 +29,7 @@ from scripts_helper import plotting_helpers as ph
 
 import gnmesh.gncore.geophysical as gp
 import gnmesh.gncore.petrophysical as pp
+import gnmesh.gncore.petrophysical_decoupled as ppd
 import gnmesh.gncore.physicsanddata as pd
 import gnmesh.regularisation as reg
 import gnmesh.meshtools as mths
@@ -46,16 +47,16 @@ def main():
 
     This function performs filesystem setup, loads synthetic data and
     meshes, constructs petrophysical transformations and regularisation
-    operators, and runs `run_ert_geo_inversion` with default parameters.
+    operators, and runs `run_ert_petro_inversion` with default parameters.
     It is intended for command-line execution only.
     """
     path_home = Path(__file__).resolve().parent.parent
     path_data_home = path_home / "data"
     path_data_synthetic = path_data_home / "synthetic"
-    path_data_results = path_data_home / "results_jsi"
+    path_data_results = path_data_home / "results_pjpi"
 
     path_figures_home = path_home / "figures"
-    path_figures_results = path_figures_home / "figures_jsi"
+    path_figures_results = path_figures_home / "figures_pjpi"
 
     path_data_results.mkdir(parents=True, exist_ok=True)
     path_figures_results.mkdir(parents=True, exist_ok=True)
@@ -164,6 +165,7 @@ def main():
     initial_model_vector_res = np.ones(inversion_mesh.cellCount()) * mean_apparent_resistivity
     initial_model_vector_slowness = np.ones(inversion_mesh.cellCount()) * (1/mean_apparent_vp)
     initial_model_vector_saturation = np.ones(inversion_mesh.cellCount()) * np.mean([saturation_from_mean_resistivity, saturation_from_mean_vp])
+    print(f"Initial saturation: {initial_model_vector_saturation[0]}")
 
     # Region of interest for inversion (exclude outer mesh)
     BUFFER_X = 30
@@ -226,8 +228,8 @@ def main():
 
     # Create decoupled region vector for regularisation - 1 and 2 for caprock and reservoir
     cell_centers = np.array(inversion_mesh.cellCenters())[:,:2]
-    petrophysical_trust_region = cell_centers[:,1] < (-LAYER_FROM_TOP_A - inclination * (cell_centers[:,0]-BUFFER_X))
-    decoupled_region_vector = petrophysical_trust_region*1+1
+    petrophysical_trust_region_on_imesh = cell_centers[:,1] < (-LAYER_FROM_TOP_A - inclination * (cell_centers[:,0]-BUFFER_X))
+    decoupled_region_vector = petrophysical_trust_region_on_imesh*1+1
 
     # %% Set up inversion parameters for geophysical ERT inversion
     # Metaparameters for inversion
@@ -240,6 +242,7 @@ def main():
     RESISTIVITY_MAX = np.ceil(np.max(original_mesh_w_models["res"])*1.1*1e1)*1e-1
     logger.info("Resistivity min: %s, max: %s", RESISTIVITY_MIN, RESISTIVITY_MAX)
     logger.info("In mesh: %s, %s", np.min(original_mesh_w_models["res"]), np.max(original_mesh_w_models["res"]))
+    print(f"Resistivity min: {RESISTIVITY_MIN}, max: {RESISTIVITY_MAX}")
 
     VELOCITY_MIN = np.floor((np.min(original_mesh_w_models["vp"])-50)*1e-1)*1e1
     VELOCITY_MAX = np.ceil((np.max(original_mesh_w_models["vp"])+50)*1e-1)*1e1
@@ -288,36 +291,43 @@ def main():
     C_MAX_SAT = SATURATION_MAX
 
     # %% Define function to conduct inversion and save results
+
     tt_normalisation = np.mean(ert_data["rhoa"])/np.mean(tt_data["t"])
 
-    def run_jsi_inversion(
+    def run_pjpi_inversion(
         tt_weight,
-        xg_weight,
+        petrophysical_trust_region=petrophysical_trust_region_on_imesh,
         mesh_info_inversion_mesh=meshinfo_inversion,
         maximum_iterations=MAXIMUM_ITERATIONS,
         max_update_per_step=[
-            (-MAX_RESISTIVITY_UPDATE_PER_STEP,MAX_RESISTIVITY_UPDATE_PER_STEP),
+            (-MAX_SATURATION_UPDATE_PER_STEP,MAX_SATURATION_UPDATE_PER_STEP),
+            (-MAX_RESISTIVITY_UPDATE_PER_STEP, MAX_RESISTIVITY_UPDATE_PER_STEP),
             (-MAX_SLOWNESS_UPDATE_PER_STEP, MAX_SLOWNESS_UPDATE_PER_STEP),
         ],
         plot=True,
         save=True,
         force_recalculate=False,
+        regularisation_weights=[
+            (1e0, 1e0),
+            (5e1, 1e2),
+        ]
     ):
-        """Run a joint seismic-geophysical inversion on the prepared mesh and data with cross-gradient regularisation.
+        """Run an joint petrophysical inversion on the prepared mesh and data.
 
         Parameters
         - `tt_weight`: relative weight for the TT data misfit in the joint inversion. The ERT data misfit weight is fixed to 1, so this parameter controls the balance between the two datasets in the joint inversion.
-        - `xg_weight`: relative weight for the cross-gradient term in the joint inversion.
+        - `petrophysical_trust_region`: boolean vector defining petrophysical trust region for decoupled regularisation. True values indicate cells where petrophysical regularisation is applied, False values indicate cells where only geophysical regularisation is applied and the petrophysical and geophysical models are decoupled.
         - `mesh_info_inversion_mesh`: `MeshInfo` instance defining inversion mesh.
         - `maximum_iterations`: maximum GN iterations.
         - `max_update_per_step`: tuple limiting per-iteration model updates.
         - `plot`, `save`: toggle plotting and result saving.
         - `force_recalculate`: ignore cached results when True.
+        - `regularisation_weights`: list of (smoothing, damping) tuples for ERT and TT regularisation, respectively. The first tuple applies to the ERT regularisation operators, the second tuple to the TT regularisation operators. The first element of each tuple is the weight for the smoothing operator, the second element the weight for the damping operator.
 
         Returns
         - `(geophysical_manager, results_dict)` tuple on success.
         """
-        results_dict_path = path_data_results.joinpath(f"results_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.json")
+        results_dict_path = path_data_results.joinpath(f"results_ttweight_{tt_weight}.json")
         inversion_mesh=mesh_info_inversion_mesh.mesh
         if results_dict_path.exists() and not force_recalculate:
             #* Load results
@@ -325,101 +335,120 @@ def main():
                 result_dict = json.load(f)
             logger.info("Results loaded from %s", results_dict_path)
             #* Load final model
-            final_mesh_with_model_jsi = pg.load(str(path_data_results.joinpath(f"final_model_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.bms").absolute()))
+            final_mesh_with_model_pjpi = pg.load(str(path_data_results.joinpath(f"final_model_ttweight_{tt_weight}.bms").absolute()))
             #* Load final response
-            final_response_ert_jsi = ert.load(str(path_data_results.joinpath(f"final_response_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.data").absolute()))
-            final_response_tt_jsi = tt.load(str(path_data_results.joinpath(f"final_response_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.data").absolute()))
+            final_response_ert_pjpi = tt.load(str(path_data_results.joinpath(f"final_response_ert_ttweight_{tt_weight}.data").absolute()))
+            final_response_tt_pjpi = tt.load(str(path_data_results.joinpath(f"final_response_tt_ttweight_{tt_weight}.data").absolute()))
             #* Manager set to none
-            geophysical_jsi_inversion = None
+            petrophysical_pjpi_inversion = None
 
         elif not results_dict_path.exists() or force_recalculate:
             logger.info("Invert on mesh with layer and decouple regularisation")
             decoupled_argument = (decoupled_region_vector, [(1,2)])
 
-            model_transformation_jsi_ert = mths.transformation.LogarithmicBarrierTransformationTwoSided(
-                lower_barrier = RESISTIVITY_MIN,
-                upper_barrier = RESISTIVITY_MAX,
+            model_transformation_sat_pjpi = mths.transformation.LogarithmicBarrierTransformationTwoSided(
+                lower_barrier = SATURATION_MIN,
+                upper_barrier = SATURATION_MAX,
             )
 
-            model_transformation_jsi_tt = mths.transformation.LogarithmicBarrierTransformationTwoSided(
-                lower_barrier = 1/VELOCITY_MAX,
-                upper_barrier = 1/VELOCITY_MIN,
+            model_transformation_ert_pjpi = mths.transformation.LogarithmicBarrierTransformationTwoSided(
+                lower_barrier=RESISTIVITY_MIN,
+                upper_barrier=RESISTIVITY_MAX,
             )
 
-            initial_model_jsi_ert = mths.modelinfo.ModelInfo(
-                model=initial_model_vector_res,
+            model_transformation_tt_pjpi = mths.transformation.LogarithmicBarrierTransformationTwoSided(
+                lower_barrier=1/VELOCITY_MAX,
+                upper_barrier=1/VELOCITY_MIN,
+            )
+
+            initial_model_pjpi = mths.ModelInfoMixedGeoPetro(
+                model_petro=np.ones(np.sum(petrophysical_trust_region)) * initial_model_vector_saturation[0],
+                model_list_geo=[
+                    np.ones(np.sum(~petrophysical_trust_region)) * archie_reservoir.forward(initial_model_vector_saturation[0]),
+                    np.ones(np.sum(~petrophysical_trust_region)) * gassmann_reservoir.forward(initial_model_vector_saturation[0])
+                ],
                 mesh_info=mesh_info_inversion_mesh,
-                transformation=model_transformation_jsi_ert,
-            )
-
-            initial_model_jsi_tt = mths.modelinfo.ModelInfo(
-                model=initial_model_vector_slowness,
-                mesh_info=mesh_info_inversion_mesh,
-                transformation=model_transformation_jsi_tt,
-                plotting_transformation=mths.transformation.PowerTransformation(-1),
+                transformation_list_petro=[
+                    archie_reservoir,
+                    gassmann_reservoir
+                ],
+                inversion_transformation_petro=model_transformation_sat_pjpi,
+                inversion_transformation_list_geo=[
+                    model_transformation_ert_pjpi,
+                    model_transformation_tt_pjpi,
+                ],
+                petrophysical_trust_region=petrophysical_trust_region
             )
 
             geophysical_data_ert = pd.pyhsics_and_data_geophysical(
                 manager=ert.ERTManager(),
                 data_container=ert_data,
                 data_observed_field_name="rhoa",
+                weight=1.0,
             )
 
             geophysical_data_tt = pd.pyhsics_and_data_geophysical(
                 manager=tt.TravelTimeManager(),
                 data_container=tt_data,
                 data_observed_field_name="t",
+                weight=tt_weight * tt_normalisation,
             )
 
-            # For geophysical inversions the data and physics objects have data weight fields that are used in the inversion.
-            # Regularisation is scaled according to the data weights, so that the regularisation has the same influence on the inversion regardless of the relative scaling of the data misfit and regularisation terms.
-            geophysical_data_tt.weight = tt_weight * tt_normalisation
+            smoothing_pjpi_ert = smoothing_operator()
+            damping_pjpi_ert = damping_operator()
+            smoothing_pjpi_tt = smoothing_operator()
+            damping_pjpi_tt = damping_operator()
 
-            smoothing_ert = smoothing_operator()
-            damping_ert = damping_operator()
+            # Smoothing is applied on the geophysical models and translated to the inversion domain. This is why we use the parameters extracted from the geophysical-only inversions here.
+            # Alternatively regularisation can be applied in the petrophysical domain and geophysical domain separately, but this requires 
+            # careful tuning 
+            smoothing_pjpi_ert.weight = regularisation_weights[0][0]
+            damping_pjpi_ert.weight = regularisation_weights[0][1]
+            smoothing_pjpi_tt.weight = regularisation_weights[1][0]
+            damping_pjpi_tt.weight = regularisation_weights[1][1]
 
-            smoothing_ert.weight=1e0
-            damping_ert.weight=1e0
-
-            smoothing_tt = smoothing_operator()
-            damping_tt = damping_operator()
-
-            smoothing_tt.weight=5e1
-            damping_tt.weight=1e2
-
-            xg_coupling = reg.XGradient()
-            xg_coupling.weight = xg_weight
-
-            geophysical_jsi_inversion = gp.GaussNewtonGeophysical(
+            petrophysical_pjpi_inversion = ppd.GaussNewtonPetrophysicalDecoupled(
                 mesh_info=mesh_info_inversion_mesh,
-                geophysical_data=[
+                petrophysical_trust_region=petrophysical_trust_region,
+                geophysical_data_list=[
                     geophysical_data_ert,
                     geophysical_data_tt
                     ],
-                initial_models=[
-                    initial_model_jsi_ert,
-                    initial_model_jsi_tt
-                ],
+                initial_model=initial_model_pjpi,
                 single_model_regularisation=[
-                    [smoothing_ert, damping_ert],
-                    [smoothing_tt, damping_tt]
+                    (smoothing_pjpi_ert, damping_pjpi_ert),
+                    (smoothing_pjpi_tt, damping_pjpi_tt),
                     ],
-                dual_model_regularisation=[
-                    xg_coupling,
-                ],
-                decouple_regularisation=decoupled_argument,
+                decouple_regularisation_regions=None, # decoupling happens already through the petrophysical_trust_region and the decoupled region vector, so no need to add an additional operator here
                 maximum_iterations=maximum_iterations,
                 verbose=True,
+                inversion_settings={
+                    "decouple_regularisation_trustregion": True,
+                    "domain": "petrophysical",
+                    "add_xg_for_untrusted_region": False,
+                    "update_petro_trust_region": False,
+                    "fix_coupled_region": np.array([True] * inversion_mesh.cellCount()),
+                    "individual_updates_with_xg": False,
+                    "minimum_petro_component_size": 0.0,
+                },
             )
-            geophysical_jsi_inversion.maximum_update_per_step = max_update_per_step
-            geophysical_jsi_inversion.terminate_on_chi2_decrease = 0.01
-            # geophysical_jsi_inversion.scaling="none"
-            geophysical_jsi_inversion.run()
+            petrophysical_pjpi_inversion.maximum_update_per_step = max_update_per_step
+            petrophysical_pjpi_inversion.terminate_on_chi2_decrease = 0.01
+            petrophysical_pjpi_inversion.num_solver = "scipy_sparse"
+            # Conditioning of the system can be a problem - play around with scaling and preconditioners to improve results.
+            # The alternative approach used here is to stabilise the inversion by introducing rather restrictive clipping
+            
+            # petrophysical_pjpi_inversion.scaling="none"
+            # petrophysical_pjpi_inversion.scaling="column_max"
+            petrophysical_pjpi_inversion.run()
 
             #* Prepare final model
-            final_mesh_with_model_jsi = inversion_mesh.copy()
-            final_mesh_with_model_jsi["res"] = geophysical_jsi_inversion.current_models[0].model
-            final_mesh_with_model_jsi["vp"] = 1/geophysical_jsi_inversion.current_models[1].model
+            final_mesh_with_model_pjpi = inversion_mesh.copy()
+            petrophysical_model_vector_pjpi = np.ones(inversion_mesh.cellCount()) * np.nan
+            petrophysical_model_vector_pjpi[petrophysical_pjpi_inversion.petrophysical_trust_region] = petrophysical_pjpi_inversion.current_model.model_petro
+            final_mesh_with_model_pjpi["sat"] = petrophysical_model_vector_pjpi
+            final_mesh_with_model_pjpi["res"] = petrophysical_pjpi_inversion.current_model.model_list_geo[0]
+            final_mesh_with_model_pjpi["vp"] = 1/petrophysical_pjpi_inversion.current_model.model_list_geo[1]
 
             ert_man_final = ert.ERTManager()
             ert_man_final.setMesh(mesh=inversion_mesh)
@@ -428,60 +457,58 @@ def main():
             tt_man_final = tt.TravelTimeManager()
             tt_man_final.setMesh(mesh=inversion_mesh)
             tt_man_final.setData(data=tt_data)
+
+            final_response_ert_pjpi_vector = ert_man_final.fop.response(final_mesh_with_model_pjpi["res"])
+            final_response_ert_pjpi = ert_data.copy()
+            final_response_ert_pjpi["rhoa"] = final_response_ert_pjpi_vector
             
-            final_response_ert_jsi_vector = ert_man_final.fop.response(final_mesh_with_model_jsi["res"])
-            final_response_ert_jsi = ert_data.copy()
-            final_response_ert_jsi["rhoa"] = final_response_ert_jsi_vector
-            
-            final_response_tt_jsi_vector = tt_man_final.fop.response(1/final_mesh_with_model_jsi["vp"])
-            final_response_tt_jsi = tt_data.copy()
-            final_response_tt_jsi["t"] = final_response_tt_jsi_vector
+            final_response_tt_pjpi_vector = tt_man_final.fop.response(1/final_mesh_with_model_pjpi["vp"])
+            final_response_tt_pjpi = tt_data.copy()
+            final_response_tt_pjpi["t"] = final_response_tt_pjpi_vector
 
-            rel_error_ert_jsi = np.linalg.norm(np.array(ert_data["rhoa"])-np.array(final_response_ert_jsi["rhoa"]))/np.linalg.norm(np.array(ert_data["rhoa"]))
-            chi2_ert_jsi = ph.data_to_chi_squared(ert_data, final_response_ert_jsi, "rhoa")
+            rel_error_ert_pjpi = np.linalg.norm(np.array(ert_data["rhoa"])-np.array(final_response_ert_pjpi["rhoa"]))/np.linalg.norm(np.array(ert_data["rhoa"]))
+            chi2_ert_pjpi = ph.data_to_chi_squared(ert_data, final_response_ert_pjpi, "rhoa")
 
-            logger.info("ERT: Relative error: %s for tt weight %s and xg weight %s", rel_error_ert_jsi, tt_weight, xg_weight)
-            logger.info("ERT: Chi squared: %s for tt weight %s and xg weight %s", chi2_ert_jsi, tt_weight, xg_weight)
+            logger.info("ERT: Relative error: %s, for smoothing %s and damping %s", rel_error_ert_pjpi, regularisation_weights[0][0], regularisation_weights[0][1])
+            logger.info("ERT: Chi squared: %s for smoothing %s and damping %s", chi2_ert_pjpi, regularisation_weights[0][0], regularisation_weights[0][1])
 
-            rel_error_tt_jsi = np.linalg.norm(np.array(tt_data["t"])-np.array(final_response_tt_jsi["t"]))/np.linalg.norm(np.array(tt_data["t"]))
-            chi2_tt_jsi = ph.data_to_chi_squared(tt_data, final_response_tt_jsi, "t")
+            rel_error_tt_pjpi = np.linalg.norm(np.array(tt_data["t"])-np.array(final_response_tt_pjpi["t"]))/np.linalg.norm(np.array(tt_data["t"]))
+            chi2_tt_pjpi = ph.data_to_chi_squared(tt_data, final_response_tt_pjpi, "t")
 
-            logger.info("TT: Relative error: %s for tt weight %s and xg weight %s", rel_error_tt_jsi, tt_weight, xg_weight)
-            logger.info("TT: Chi squared: %s for tt weight %s and xg weight %s", chi2_tt_jsi, tt_weight, xg_weight)
+            logger.info("TT: Relative error: %s, for smoothing %s and damping %s", rel_error_tt_pjpi, regularisation_weights[1][0], regularisation_weights[1][1])
+            logger.info("TT: Chi squared: %s for smoothing %s and damping %s", chi2_tt_pjpi, regularisation_weights[1][0], regularisation_weights[1][1])
 
-            data_misfit = [geophysical_jsi_inversion.tracking_dict[iteration]["data_misfit"] for iteration in range(0, geophysical_jsi_inversion.maximum_iterations+1)]
+            data_misfit = [petrophysical_pjpi_inversion.tracking_dict[iteration]["data_misfit"] for iteration in range(0, petrophysical_pjpi_inversion.maximum_iterations+1)]
             chi_squared_history = [
-                geophysical_jsi_inversion.tracking_dict[iteration]["chi_squared"] for iteration in range(0, geophysical_jsi_inversion.maximum_iterations+1)
+                petrophysical_pjpi_inversion.tracking_dict[iteration]["chi_squared"] for iteration in range(0, petrophysical_pjpi_inversion.maximum_iterations+1)
             ]
-            single_model_regularisation_misfit = [geophysical_jsi_inversion.tracking_dict[iteration]["single_model_regularisation_misfit"] for iteration in range(0, geophysical_jsi_inversion.maximum_iterations+1)]
-            dual_model_regularisation_misfit = [geophysical_jsi_inversion.tracking_dict[iteration]["dual_model_regularisation_misfit"] for iteration in range(0, geophysical_jsi_inversion.maximum_iterations+1)]
+            single_model_regularisation_misfit = [petrophysical_pjpi_inversion.tracking_dict[iteration]["single_model_regularisation_misfit"] for iteration in range(0, petrophysical_pjpi_inversion.maximum_iterations+1)]
 
             if save:
-                final_response_ert_jsi.save(str(path_data_results.joinpath(f"final_response_ert_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.data").absolute()))
-                final_response_tt_jsi.save(str(path_data_results.joinpath(f"final_response_tt_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.data").absolute()))
-                final_mesh_with_model_jsi.save(
+                final_response_ert_pjpi.save(str(path_data_results.joinpath(f"final_response_ert_ttweight_{tt_weight}.data").absolute()))
+                final_response_tt_pjpi.save(str(path_data_results.joinpath(f"final_response_tt_ttweight_{tt_weight}.data").absolute()))
+                final_mesh_with_model_pjpi.save(
                     str(path_data_results.joinpath(
-                    f"final_model_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.bms"
+                    f"final_model_ttweight_{tt_weight}.bms"
                     ).absolute())
                     )
 
             result_dict = {
-                "inversion_name": "jsi",
-                "inversion_domain": "geo",
+                "inversion_name": "pjpi",
+                "inversion_domain": "petro",
                 "joint_inversion": False,
-                "rel_error_ert": rel_error_ert_jsi,
-                "rel_error_tt": rel_error_tt_jsi,
-                "final_chi2_ert": chi2_ert_jsi,
-                "final_chi2_tt": chi2_tt_jsi,
-                "smoothing_ert": 1e0,
-                "damping_ert": 1e0,
-                "smoothing_tt": 5e1,
-                "damping_tt": 1e2,
-                "iterations": geophysical_jsi_inversion.maximum_iterations,
+                "rel_error_ert": rel_error_ert_pjpi,
+                "rel_error_tt": rel_error_tt_pjpi,
+                "final_chi2_ert": chi2_ert_pjpi,
+                "final_chi2_tt": chi2_tt_pjpi,
+                "smoothing_ert": regularisation_weights[0][0],
+                "damping_ert": regularisation_weights[0][1],
+                "smoothing_tt": regularisation_weights[1][0],
+                "damping_tt": regularisation_weights[1][1],
+                "iterations": petrophysical_pjpi_inversion.maximum_iterations,
                 "data_misfit": data_misfit,
                 "chi_squared_history": chi_squared_history,
                 "single_model_regularisation_misfit": single_model_regularisation_misfit,
-                "dual_model_regularisation_misfit": dual_model_regularisation_misfit,
             }
 
             if save:
@@ -497,11 +524,13 @@ def main():
         #* Plotting results
         if plot:
             #* Plot final models
-            fig, axs = plt.subplots(1, 4, figsize=(20, 8), layout="constrained")
-            _=pg.show(original_mesh_w_models, data="res", cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[0], label="Resistivity")
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_jsi["res"], cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[1], label="Resistivity")
-            _=pg.show(original_mesh_w_models, data="vp", cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[2], label="Velocity")
-            _=pg.show(inversion_mesh, data=final_mesh_with_model_jsi["vp"], cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[3], label="Velocity")
+            fig, axs = plt.subplots(1, 6, figsize=(25, 8), layout="constrained")
+            _=pg.show(original_mesh_w_models, data="sat", cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[0], label="Saturation")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_pjpi["sat"], cMap=CMAP, logScale=logScale, cMin=C_MIN_SAT, cMax=C_MAX_SAT, ax=axs[1], label="Saturation")
+            _=pg.show(original_mesh_w_models, data="res", cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[2], label="Resistivity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_pjpi["res"], cMap=CMAP, logScale=logScale, cMin=C_MIN_RES, cMax=C_MAX_RES, ax=axs[3], label="Resistivity")
+            _=pg.show(original_mesh_w_models, data="vp", cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[4], label="Velocity")
+            _=pg.show(inversion_mesh, data=final_mesh_with_model_pjpi["vp"], cMap=CMAP, logScale=logScale, cMin=C_MIN_VP, cMax=C_MAX_VP, ax=axs[5], label="Velocity")
 
             for ax in axs:
                 ax.set_xlabel("X (m)")
@@ -510,14 +539,15 @@ def main():
                 ax.set_ylim(DOMAIN_YMIN, DOMAIN_YMAX)
                 plot_boreholes_on_mesh(ax)
 
-            axs[0].set_title("Original resistivity model")
-            axs[1].set_title(f"Final resistivity model JSI inversion \n tt weight: {tt_weight}, xg weight: {xg_weight:2g}")
-            axs[2].set_title("Original velocity model")
-            axs[3].set_title(f"Final velocity model JSI inversion \n tt weight: {tt_weight}, xg weight: {xg_weight:2g}")
-
+            axs[0].set_title("Original model saturation")
+            axs[1].set_title(f"Final saturation model PJPI with TT weight {tt_weight}")
+            axs[2].set_title("Original model resistivity")
+            axs[3].set_title(f"Final resistivity model PJPI with TT weight {tt_weight}")
+            axs[4].set_title("Original model velocity")
+            axs[5].set_title(f"Final velocity model PJPI with TT weight {tt_weight}")
             if save:
                 fig.savefig(
-                    str(path_figures_results.joinpath(f"final_models_jsi_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.jpg").absolute()),
+                    str(path_figures_results.joinpath(f"final_models_ttweight_{tt_weight}.jpg").absolute()),
                     format='jpg',
                     dpi=300,
                     bbox_inches='tight'
@@ -527,7 +557,7 @@ def main():
             #* Plot misfit history
             fig, ax = ph.plot_misfits_from_results_dict(
                 results_dict=result_dict,
-                fields_to_plot=["data", "single", "dual"]
+                fields_to_plot=["data", "single"]
             )
             ax.set_title("Misfit history")
             ax.set_xlabel("Iteration")
@@ -535,7 +565,7 @@ def main():
             ax.set_yscale("log")
             if save:
                 fig.savefig(
-                    str(path_figures_results.joinpath(f"misfit_history_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.jpg").absolute()),
+                    str(path_figures_results.joinpath(f"misfit_history_ttweight_{tt_weight}.jpg").absolute()),
                     format='jpg',
                     dpi=300,
                     bbox_inches='tight'
@@ -544,7 +574,7 @@ def main():
 
             #* Plot final misfits - TT
             residual_container_ert = ert_data.copy()
-            residual_container_ert["rhoa"] = np.abs(final_response_ert_jsi["rhoa"] - ert_data["rhoa"]) / np.abs(ert_data["rhoa"])
+            residual_container_ert["rhoa"] = np.abs(final_response_ert_pjpi["rhoa"] - ert_data["rhoa"]) / np.abs(ert_data["rhoa"])
             data_matrices, offsets = ph.gather_datamatrices_by_offset(residual_container_ert)
             fig, axs = ph.plot_datamatrices_by_offset(
                 data_matrices=data_matrices[3:],
@@ -555,14 +585,14 @@ def main():
                 figsize=(20, 5),
                 layout='constrained',
             )
-            fig.suptitle(f"Relative residuals by offset for JSI with TT weight {tt_weight} and XG weight {xg_weight:2g}")
+            fig.suptitle(f"Relative residuals by offset for ERT PJPI with TT weight {tt_weight}")
             if save:
-                fig.savefig(str(path_figures_results.joinpath(f"final_residual_ert_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
+                fig.savefig(str(path_figures_results.joinpath(f"final_residual_ert_ttweight_{tt_weight}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
 
             #* Plot final misfits - TT
             residual_container_tt = tt_data.copy()
-            residual_container_tt["t"] = np.abs(final_response_tt_jsi["t"] - tt_data["t"]) / np.abs(tt_data["t"])
+            residual_container_tt["t"] = np.abs(final_response_tt_pjpi["t"] - tt_data["t"]) / np.abs(tt_data["t"])
             fig, ax = ph.plot_apparent_velocities_from_data(
                 data_tt = residual_container_tt,
                 field="t",
@@ -570,21 +600,19 @@ def main():
                 cMax=REL_RESIDUAL_TT_CMAX,
                 cMap="turbo",
             )
-            ax.set_title(f"Relative residuals TT JSI with TT weight {tt_weight} and XG weight {xg_weight:2g}")
+            ax.set_title(f"Relative residuals TT PJPI with TT weight {tt_weight}")
             if save:
-                fig.savefig(str(path_figures_results.joinpath(f"final_residual_tt_ttweight_{tt_weight}_xgweight_{xg_weight:2g}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
+                fig.savefig(str(path_figures_results.joinpath(f"final_residual_tt_ttweight_{tt_weight}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
 
-            return geophysical_jsi_inversion, result_dict
+            return petrophysical_pjpi_inversion, result_dict
 
     # Run a default inversion when invoked as a script.
-    for tt_weight in [1, 10 , 20]:
-        xg_weight_list = [0.0, 1e6, 1e7, 1e8] if tt_weight==1 else [1e6, 1e7, 1e8] # Only run with xg_weight=0 for tt_weight=1 to save time, as this is the only case where the cross-gradient coupling is not strong.
-        for xg_weight in xg_weight_list:
-            run_jsi_inversion(
-                tt_weight=tt_weight,
-                xg_weight=xg_weight,
-            )
+    for tt_weight in [.1, 1, 10]:
+        run_pjpi_inversion(
+            tt_weight=tt_weight,
+        )
+
 
 if __name__ == "__main__":
     main()

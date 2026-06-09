@@ -292,7 +292,7 @@ def main():
 
     tt_normalisation = np.mean(ert_data["rhoa"])/np.mean(tt_data["t"])
 
-    def run_tt_petro_inversion(
+    def run_jpi_inversion(
         tt_weight,
         mesh_info_inversion_mesh=meshinfo_inversion,
         maximum_iterations=MAXIMUM_ITERATIONS,
@@ -301,10 +301,10 @@ def main():
         save=True,
         force_recalculate=False,
     ):
-        """Run an ERT inversion on the prepared mesh and data.
+        """Run an joint petrophysical inversion on the prepared mesh and data.
 
         Parameters
-        - `smoothing_para`, `damping_para`: regularisation weights (float).
+        - `tt_weight`: relative weight for the TT data misfit in the joint inversion. The ERT data misfit weight is fixed to 1, so this parameter controls the balance between the two datasets in the joint inversion.
         - `mesh_info_inversion_mesh`: `MeshInfo` instance defining inversion mesh.
         - `maximum_iterations`: maximum GN iterations.
         - `max_update_per_step`: tuple limiting per-iteration model updates.
@@ -530,7 +530,7 @@ def main():
                 figsize=(20, 5),
                 layout='constrained',
             )
-            fig.suptitle(f"Relative residuals by offset for ERT petro inversion with TT weight {tt_weight}")
+            fig.suptitle(f"Relative residuals by offset for ERT JPI with TT weight {tt_weight}")
             if save:
                 fig.savefig(str(path_figures_results.joinpath(f"final_residual_ert_ttweight_{tt_weight}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
@@ -545,7 +545,7 @@ def main():
                 cMax=REL_RESIDUAL_TT_CMAX,
                 cMap="turbo",
             )
-            ax.set_title(f"Relative residuals TT JPI inversion with TT weight {tt_weight}")
+            ax.set_title(f"Relative residuals TT JPI with TT weight {tt_weight}")
             if save:
                 fig.savefig(str(path_figures_results.joinpath(f"final_residual_tt_ttweight_{tt_weight}.jpg").absolute()), format='jpg', dpi=300, bbox_inches='tight')
                 plt.close(fig)
@@ -554,8 +554,8 @@ def main():
 
     # Run a default inversion when invoked as a script.
     for tt_weight in [.1, 1, 10]:
-        run_tt_petro_inversion(
-            tt_weight=tt_weight
+        run_jpi_inversion(
+            tt_weight=tt_weight,
         )
 
 

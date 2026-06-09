@@ -228,14 +228,14 @@ def plot_misfits_from_results_dict(results_dict, data_misfit="chi_squared", fiel
             ax2 = ax.twinx()
             ax2.plot(iterations, results_dict["dual_model_regularisation_misfit"], label="Dual model regularisation misfit", color="red")
             ax2.set_ylabel("Misfit of XG-term")
-            ax2.legend()
+            ax2.legend(loc="upper center")
         except Exception as e:
             print(e)
             print("Joint model regularisation misfit not available")
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Misfit")
     ax.set_title("Misfit history")
-    ax.legend()
+    ax.legend(loc="upper right")
     return fig, ax
 
 def apparent_velocity_from_data(data_tt):
