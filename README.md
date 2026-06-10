@@ -26,13 +26,13 @@ other compiled dependencies).
 Create environment and install dependencies:
 
 ```bash
-# create environment (and install pygimli)
+# create environment (and install pygimli) or use an already existing pygimli environment
 conda create -n pjpi python=3.11
 conda activate pjpi
 
 conda install -c gimli pygimli
 
-# optinally install cupy into this environment for cupy support
+# optionally install cupy into this environment for cupy support
 conda install -c conda-forge cupy
 
 # Install package in editable/development mode (from project root)
