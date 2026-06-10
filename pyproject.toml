@@ -5,19 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gnmesh"
 version = "0.1.0"
-description = "Utilities for mesh-based model information, gradients, and transformations"
-readme = "README"
+description = "Utilities for mesh-based model information, gradients, transformations, Gauss-Newton inversions."
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
 	"numpy",
 	"scipy",
 	"matplotlib",
 	"pygimli",
-]
-
-[project.optional-dependencies]
-gpu = [
-	"cupy; platform_system != 'Darwin'",
 ]
 
 [tool.setuptools]

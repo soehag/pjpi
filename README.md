@@ -27,7 +27,7 @@ Create environment and install dependencies:
 
 ```bash
 # create environment (and install pygimli)
-conda create -n pjpi
+conda create -n pjpi python=3.11
 conda activate pjpi
 
 conda install -c gimli pygimli
