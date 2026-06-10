@@ -26,14 +26,17 @@ other compiled dependencies).
 Create environment and install dependencies:
 
 ```bash
-# create environment (choose python version appropriate for your system)
-conda create -n pjpi python=3.11 -y
+# create environment (and install pygimli)
+conda create -n pjpi
 conda activate pjpi
 
-# Install core dependencies from conda-forge (pygimli is available there)
-conda install -c conda-forge numpy scipy pygimli matplotlib -y
+conda install -c gimli pygimli
+
+# optinally install cupy into this environment for cupy support
+conda install -c conda-forge cupy
 
 # Install package in editable/development mode (from project root)
+cd pjpi
 pip install -e .
 ```
 
@@ -46,7 +49,7 @@ Run the example inversion scripts sequentially (non-parallel):
 
 ```bash
 # from project root
-python example_gn/scripts_inversion/run_all_inversions.py
+python example_gn/run_full_example.py
 
 # or run and stop on first error
 ./example_gn/scripts_inversion/run_all_inversions.py --stop

@@ -1,12 +1,11 @@
-"""Run all inversion example scripts sequentially.
+"""Run preprocessing and all inversion example scripts sequentially.
 
-This script finds all files named `inversion_*.py` in the same
-directory and executes them one by one using the current Python
-interpreter. It logs the outcome of each run and can optionally stop
-on the first error.
+This script first executes `create_crosshole_example_data.py` to (re)
+generate example geometry, meshes and figures, then runs all
+`inversion_*.py` scripts located in the `scripts_inversion/` folder.
 
 Usage:
-    python run_all_inversions.py         # run all, continue on errors
+    python run_all_inversions.py         # run preprocessing + all inversions
     python run_all_inversions.py --stop  # stop on first non-zero exit
 """
 
@@ -33,18 +32,30 @@ def run_script(path: Path, python_exe: str) -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run all inversion example scripts sequentially.")
+    parser = argparse.ArgumentParser(description="Run preprocessing and all inversion example scripts sequentially.")
     parser.add_argument("--stop", "-s", action="store_true", help="Stop on first non-zero exit code")
-    parser.add_argument("--dir", "-d", default=Path(__file__).resolve().parent, type=Path, help="Directory containing inversion scripts")
+    parser.add_argument("--inversion-dir", "-d", default=Path(__file__).resolve().parent / "scripts_inversion", type=Path, help="Directory containing inversion scripts")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s: %(message)s")
 
     python_exe = sys.executable
-    scripts = find_inversion_scripts(args.dir)
+
+    # First, run preprocessing script to (re)generate meshes/figures
+    preprocessing = Path(__file__).resolve().parent / "create_crosshole_example_data.py"
+    if preprocessing.exists():
+        rc = run_script(preprocessing, python_exe)
+        if rc != 0:
+            logger.error("Preprocessing script %s failed with exit=%s", preprocessing.name, rc)
+            if args.stop:
+                raise SystemExit(rc)
+    else:
+        logger.warning("Preprocessing script not found: %s", preprocessing)
+
+    scripts = find_inversion_scripts(args.inversion_dir)
 
     if not scripts:
-        logger.warning("No inversion_*.py scripts found in %s", args.dir)
+        logger.warning("No inversion_*.py scripts found in %s", args.inversion_dir)
         return 0
 
     failures = []
