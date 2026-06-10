@@ -36,8 +36,8 @@ import gnmesh.meshtools as mths
 os.environ["OMP_NUM_THREADS"] = str(os.cpu_count())
 
 # Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s: %(message)s", force=True)
 
 # %%
 #* Set up folder structure
