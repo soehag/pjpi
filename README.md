@@ -37,7 +37,7 @@ conda install -c conda-forge cupy
 
 # Install package in editable/development mode (from project root)
 cd pjpi
-pip install -e .
+pip install --no-deps -e .
 ```
 
 If you prefer to use `mamba` for faster installs, replace `conda install`
