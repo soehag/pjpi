@@ -1,6 +1,6 @@
-"""ERT inversion example script.
+"""ERT-geophysical inversion example script.
 
-This module runs a geophysical (ERT) inversion on a prepared synthetic
+This module runs a geophysical ERT inversion on a prepared synthetic
 crosshole mesh and data. It provides ``run_ert_geo_inversion`` and a
 ``__main__`` entrypoint for standalone execution.
 """
@@ -42,7 +42,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s: %(message)s", force
 # %%
 #* Set up folder structure
 def main():
-    """Prepare data and run the default ERT inversion.
+    """Prepare data and run the default ERT-geophysical inversion.
 
     This function performs filesystem setup, loads synthetic data and
     meshes, constructs petrophysical transformations and regularisation

@@ -1,7 +1,7 @@
-"""ERT inversion example script.
+"""Partially joint petrophysical inversion example script.
 
-This module runs a geophysical (ERT) inversion on a prepared synthetic
-crosshole mesh and data. It provides ``run_ert_geo_inversion`` and a
+This module runs a partially joint petrophysical inversion on a prepared synthetic
+crosshole mesh and data. It provides ``run_pjpi_inversion`` and a
 ``__main__`` entrypoint for standalone execution.
 """
 
@@ -43,11 +43,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s: %(message)s", force
 # %%
 #* Set up folder structure
 def main():
-    """Prepare data and run the default ERT inversion.
+    """Prepare data and run the default partially joint petrophysical inversion.
 
     This function performs filesystem setup, loads synthetic data and
     meshes, constructs petrophysical transformations and regularisation
-    operators, and runs `run_ert_petro_inversion` with default parameters.
+    operators, and runs `run_pjpi_inversion` with default parameters.
     It is intended for command-line execution only.
     """
     path_home = Path(__file__).resolve().parent.parent

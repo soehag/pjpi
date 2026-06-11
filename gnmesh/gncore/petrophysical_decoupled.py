@@ -149,12 +149,13 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
         # Initialise the regularisation settings
         if inversion_settings is None:
+            if self.verbose:
+                logger.info("No regularisation settings provided. Using default settings.")
             inversion_settings = {
                 "decouple_regularisation_trustregion": True,
                 "domain": "petrophysical",
                 "add_xg_for_untrusted_region": False,
                 "xg_weight": 1.0,
-                "decouple_xg": False,
                 "update_petro_trust_region": False,
                 "update_petro_trust_region_function": None,
                 "update_after_iteration": 1,
@@ -179,9 +180,6 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 assert "xg_weight" in inversion_settings, "xg_weight key must be in regularisation settings."
                 assert isinstance(inversion_settings["xg_weight"], (int, float)), "xg_weight must be an integer or float."
                 assert inversion_settings["xg_weight"] > 0, "xg_weight must be greater than 0."
-
-                assert "decouple_xg" in inversion_settings, "decouple_xg key must be in regularisation settings."
-                assert inversion_settings["decouple_xg"] in [True, False], "decouple_xg must be either True or False."
 
                 self._xg_regularisation = reG.XGradient(
                     weight=inversion_settings["xg_weight"],
@@ -215,11 +213,20 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
             assert inversion_settings["minimum_petro_component_size"] >= 0, "minimum_petro_component_size must be greater or equal than 0."
 
+        if not "update_after_iteration" in inversion_settings:
+            inversion_settings["update_after_iteration"] = np.inf
+        
+        if not "enable_petro_update_after_chi_decrease" in inversion_settings:
+            inversion_settings["enable_petro_update_after_chi_decrease"] = -np.inf
+
         # Set maximum update per step
         self._maximum_update_per_step = [(-np.inf, np.inf)] * (1 + self._number_of_datasets)
 
-        self._regularisation_settings = inversion_settings
-        logger.info("Regularisation settings: %s", self._regularisation_settings)
+        self._inversion_settings = inversion_settings.copy()
+        logger.info("Regularisation settings: %s", self._inversion_settings)
+
+        # Set enable petrophysical trustregion update
+        self.update_petrophysical_trustregion_enabled = False
 
         # Initialise the numerical solver by default
         self.num_solver = "cupy_sparse"
@@ -336,6 +343,17 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         assert all(v[0] < v[1] for v in value), "Maximum update per step must be a tuple of tuples with the first element smaller than the second element."
         self._maximum_update_per_step = value
 
+    @property
+    def update_petrophysical_trustregion_enabled(self):
+        """ Returns whether the petrophysical trust region update is enabled."""
+        return self._update_petro_trustregion_enabled
+    
+    @update_petrophysical_trustregion_enabled.setter
+    def update_petrophysical_trustregion_enabled(self, value):
+        """ Sets whether the petrophysical trust region update is enabled."""
+        assert isinstance(value, bool), "update_petrophysical_trustregion_enabled must be a boolean."
+        self._update_petro_trustregion_enabled = value
+
     def run(self):
         """
         Execute the Gauss-Newton inversion loop.
@@ -391,7 +409,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
             self._tracking_dict[self._current_iteration][
                 "single_model_regularisation_misfit"
             ] = np.linalg.norm(model_misfit_list)
-            if self._regularisation_settings["add_xg_for_untrusted_region"] and self._current_iteration >= self._regularisation_settings["update_after_iteration"]:
+            if self._inversion_settings["add_xg_for_untrusted_region"] and self._current_iteration >= self._inversion_settings["update_after_iteration"]:
                 self._tracking_dict[self._current_iteration]["dual_model_regularisation_misfit"] = np.linalg.norm(xg_jacobian_misfit)
 
             #* Check if the termination criterion is met
@@ -405,17 +423,33 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                     if self.verbose:
                         logger.info("Chi2 percentage decrease: %s", chi2_percentage_decrease_list)
                     if all([chi2_percentage_decrease < self._terminate_on_chi2_decrease for chi2_percentage_decrease in chi2_percentage_decrease_list]):
-                        logger.info("Chi2 decrease criterion reached. Returning.")
-                        break
+                        if self._inversion_settings["update_petro_trust_region"] and not self.update_petrophysical_trustregion_enabled:
+                            self.update_petrophysical_trustregion_enabled = True
+                            if self.verbose:
+                                logger.info("----------Petrophysical trust region update enabled by termination criterion.----------")
+                        else:
+                            logger.info("----------Termination criterion reached: Chi2 decrease below threshold. Returning.----------")
+                            break
 
             #* Recalculate the petro trust region -> Calculate the individual model updates
-            if self._regularisation_settings["update_petro_trust_region"] and self._current_iteration >= self._regularisation_settings["update_after_iteration"]:
+            if self._inversion_settings["update_petro_trust_region"]:
+                if self.current_iteration >= self._inversion_settings["update_after_iteration"]:
+                    if self.verbose and not self.update_petrophysical_trustregion_enabled:
+                        logger.info("----------Petrophysical trust region update enabled by iteration.----------")
+                        self.update_petrophysical_trustregion_enabled = True
+
+                if self._current_iteration >0 and all([chi2_percentage_decrease < self._inversion_settings["enable_petro_update_after_chi_decrease"] for chi2_percentage_decrease in chi2_percentage_decrease_list]):
+                    if self.verbose and not self.update_petrophysical_trustregion_enabled:
+                        logger.info("----------Petrophysical trust region update enabled by chi2 decrease.----------")
+                        self.update_petrophysical_trustregion_enabled = True
+
+            if self._inversion_settings["update_petro_trust_region"] and self.update_petrophysical_trustregion_enabled:
                 if self.verbose:
                     logger.info("----------Start: Update petro trust region.----------")
                 n_petro_in_roi = np.sum(self.petrophysical_trust_region[self._region_of_interest])
                 start_time = time.time()
                 #* Calculate the individual model updates
-                if self._regularisation_settings["individual_updates_with_xg"]:
+                if self._inversion_settings["individual_updates_with_xg"]:
                     logger.info("----------Using XG for individual model updates.----------")
                     individual_model_update_list = self.get_individual_model_updates_xg(
                         iwjacobian_data_list=iwjacobian_data_list,
@@ -436,7 +470,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
                 #* Calculate the petro trust region
                 # (legacy) previously assembled long-format individual updates here — removed
-                new_petrophysical_trust_region, diverging, significant = self._regularisation_settings["update_petro_trust_region_function"](
+                new_petrophysical_trust_region, diverging, significant = self._inversion_settings["update_petro_trust_region_function"](
                     list_models=[self.current_model.model_petro, self.current_model.model_petro],
                     list_model_updates=individual_model_update_list,
                     current_petrophysical_trust_region=self.petrophysical_trust_region,
@@ -469,13 +503,13 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
 
                 #* Update the petrophysical trust region
-                new_petrophysical_trust_region = np.logical_or(new_petrophysical_trust_region, self._regularisation_settings["fix_coupled_region"])
+                new_petrophysical_trust_region = np.logical_or(new_petrophysical_trust_region, self._inversion_settings["fix_coupled_region"])
 
                 #* Remove small components from the petrophysical trust region
-                if self._regularisation_settings["minimum_petro_component_size"] > 0:
+                if self._inversion_settings["minimum_petro_component_size"] > 0:
                     self.remove_small_components_from_petrophysical_trust_region(
                         new_petrophysical_trust_region=new_petrophysical_trust_region,
-                        min_size=self._regularisation_settings["minimum_petro_component_size"]
+                        min_size=self._inversion_settings["minimum_petro_component_size"]
                         )
                     
                 #* Apply new model transformations to individual matrices
@@ -530,56 +564,78 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
                 full_rhs = rhs_data
 
             # Add XG for untrusted region
-            if self._regularisation_settings["add_xg_for_untrusted_region"]:
-                self._xg_regularisation.weight = self._regularisation_settings["xg_weight"]
+            if self._inversion_settings["add_xg_for_untrusted_region"]:
+                self._xg_regularisation.weight = self._inversion_settings["xg_weight"]
+                geo_model_list = self._current_model.get_individual_geo_model_instances()
                 xg_jacobian = self._xg_regularisation.get_jacobian(
                     physics_and_data=self.data,
-                    model_info_list=self._current_model,
-                )
+                    model_info_list=geo_model_list,
+                ).tocsr()
+
                 xg_jacobian_misfit = self._xg_regularisation.get_phi(
                     physics_and_data=self.data,
-                    model_info_list=self._current_model,
+                    model_info_list=geo_model_list,
                     weighted=True,
                 )
                 if self.scheme == "creeping":
                     xg_rhs = self._xg_regularisation.get_rhs_creeping(
                         physics_and_data=self.data,
-                        model_info_list=self._current_model,
+                        model_info_list=geo_model_list,
                     )
                 elif self.scheme == "jumping":
                     xg_rhs = self._xg_regularisation.get_rhs_jumping(
                         physics_and_data=self.data,
-                        model_info_list=self._current_model,
+                        model_info_list=geo_model_list,
                         domain="inversion",
                     )
                 else:
                     raise ValueError("Invalid scheme provided.")
 
                 #* Assemble the xg jacobian according to the petrophysical_trust_region
-                trusted_region_double = np.concatenate([self.petrophysical_trust_region, np.full_like(self.petrophysical_trust_region, False)])
-                untrust_region_double = np.concatenate([~self.petrophysical_trust_region, ~self.petrophysical_trust_region])
+                trusted_indices_in_roi = self.petrophysical_trust_region[self._region_of_interest]
+                trusted_indices_in_roi_double = np.concatenate([trusted_indices_in_roi, trusted_indices_in_roi])
+                trusted_cols = np.where(trusted_indices_in_roi_double)[0]
+                untrusted_indices_in_roi = ~self.petrophysical_trust_region[self._region_of_interest]
+                untrusted_indices_in_roi_double = np.concatenate([untrusted_indices_in_roi, untrusted_indices_in_roi])
+                untrusted_cols = np.where(untrusted_indices_in_roi_double)[0]
 
-                if self._regularisation_settings["decouple_xg"]:
-                    logger.info("Decoupling XG.")
-                    xg_rows_to_remove = []
-                    for row in range(xg_jacobian.shape[0]):
-                        if np.any(xg_jacobian[row,trusted_region_double] != 0) and np.any(xg_jacobian[row,untrust_region_double]!= 0):
-                            xg_rows_to_remove.append(row)
-                        # Remove zero rows
-                        if np.all(xg_jacobian[row,:] == 0):
-                            xg_rows_to_remove.append(row)
-                    xg_rows_to_keep = np.setdiff1d(np.arange(xg_jacobian.shape[0]), xg_rows_to_remove)
-                    xg_jacobian = xg_jacobian[xg_rows_to_keep,:]
-                    xg_rhs = xg_rhs[xg_rows_to_keep]
+                # 1 - remove rows coupling the petrophysical trusted and untrusted regions as petrophysical and xg coupling is not consistent
+                logger.info("Decoupling XG. Removing rows coupling trusted and untrusted regions. XG jacobian shape before: %s", xg_jacobian.shape)
+                xg_rows_to_remove = []
+                for row in range(xg_jacobian.shape[0]):
+                    row_data = xg_jacobian.getrow(row)
+                    has_trusted = row_data[:, trusted_cols].nnz > 0
+                    has_untrusted = row_data[:, untrusted_cols].nnz > 0
+                    if has_trusted and has_untrusted:
+                        xg_rows_to_remove.append(row)
 
-                xg_jacobian = np.hstack(
-                    (
-                    xg_jacobian[:,trusted_region_double],
-                    xg_jacobian[:,untrust_region_double],
+                xg_rows_to_keep = np.setdiff1d(np.arange(xg_jacobian.shape[0]), xg_rows_to_remove)
+
+                xg_jacobian = xg_jacobian[xg_rows_to_keep,:]
+                xg_rhs = xg_rhs[xg_rows_to_keep]
+
+                logger.info("XG jacobian shape after removing rows coupling trusted and untrusted regions: %s", xg_jacobian.shape)
+
+                # 2 - mask columns according to the petrophysical trust region (keep all columns but zero out trusted region columns to enforce xg only in untrusted region)
+
+                # Prepare transformation vector
+                transformation_vector_list = [
+                    self.current_model.get_transformed_model_gradient_from_geo(
+                        method_number=method_number,
                     )
-                )
+                    for method_number in range(len(self.data))
+                ]
+                transformation_vector = np.concatenate(transformation_vector_list)
+                transformation_vector = transformation_vector[untrusted_cols]
 
-                xg_jacobian = sP.sparse.csr_matrix(xg_jacobian)
+                # Assemble the matrix
+                xg_jacobian = sP.sparse.hstack(
+                    [
+                        sP.sparse.csr_matrix((xg_jacobian.shape[0], np.sum(self.petrophysical_trust_region[self._region_of_interest]))),
+                        xg_jacobian[:,untrusted_cols].multiply(transformation_vector)
+                    ],
+                    format="csr"
+                )
 
                 full_jacobian = sP.sparse.vstack(
                     [full_jacobian, xg_jacobian],
@@ -664,10 +720,10 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
         self._tracking_dict[self._current_iteration]["single_model_regularisation_misfit"] = model_misfit
 
         #* Calculate the final XG misfit
-        if self._regularisation_settings["add_xg_for_untrusted_region"]:
+        if self._inversion_settings["add_xg_for_untrusted_region"]:
             xg_jacobian_misfit = self._xg_regularisation.get_phi(
                 physics_and_data=self.data,
-                model_info_list=self._current_model,
+                model_info_list=self._current_model.get_individual_geo_model_instances(),
                 weighted=True,
             )
             self._tracking_dict[self._current_iteration]["dual_model_regularisation_misfit"] = np.linalg.norm(xg_jacobian_misfit)
@@ -911,7 +967,7 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
             rhs = np.concatenate(rhs_list_model, axis=0).flatten()
 
             #* Remove coupled rows if necessary [coupling between petro and non petro region] / [coupling between two regions]
-            if self._regularisation_settings["decouple_regularisation_trustregion"]:
+            if self._inversion_settings["decouple_regularisation_trustregion"]:
                 if model_no==0 and self.verbose:
                     logger.info("Decoupling regularisation between trusted and untrusted regions.")
                 jacobian, rows_to_keep = self.remove_rows_coupling_trusted_untrusted(jacobian)
@@ -1533,17 +1589,17 @@ class GaussNewtonPetrophysicalDecoupled(GaussNewtonCore):
 
         return connected_components, labels, adjacency_matrix
 
-    def remove_small_components_from_petro_trust_region(self, new_petrophysical_trust_region, min_size, criterion="area"):
+    def remove_small_components_from_petrophysical_trust_region(self, new_petrophysical_trust_region, min_size, criterion="area"):
         """
-        Remove small components from the petro trust region.
+        Remove small components from the petrophysical trust region.
         
         Parameters:
-        - new_petrophysical_trust_region: np.ndarray, the petro physical trust region.
+        - new_petrophysical_trust_region: np.ndarray, the petrophysical trust region.
         - min_size: int, the minimum size of a component to keep.
         - criterion: str, the criterion to use for removing small components. Options are "count" or "area".
         
         Returns:
-        - new_petrophysical_trust_region: np.ndarray, the new petro physical trust region.
+        - new_petrophysical_trust_region: np.ndarray, the new petrophysical trust region.
         """
         connected_components_untrusted, _, _ = self.connected_components_from_meshinfo_petrophysical_trust_region(
             new_petrophysical_trust_region=new_petrophysical_trust_region,
@@ -1791,7 +1847,7 @@ def update_petro_from_diverging_model_updates(list_models, list_model_updates, c
     """ Updates the petrophysical model from diverging model updates. The criterion for the divergence is that the
     individual model update are diverging and significant.
 
-    Model updates are considered to be significant if they are larger than a certain percentage of the model.
+    Model updates are considered to be significant if they are larger than a certain percentage/absolute value of the model.
     Model updates are considered to be diverging if they are in the same direction.
     
     Parameters
@@ -1899,8 +1955,8 @@ def update_petro_from_large_difference_in_model_updates(list_models, list_model_
     #* Check if the model updates are significant - model updates are significant, if at least one of the model updates is large [relative or absolute]
     #* Relative is only relevant in regions in the petro trust region if only shrink trust region is True
     if difference == "relative":
-        significant_model_1 = np.abs(list_model_updates[0]) > level * np.abs(np.array(list_models[0].model))
-        significant_model_2 = np.abs(list_model_updates[1]) > level * np.abs(np.array(list_models[1].model))
+        significant_model_1 = np.abs(list_model_updates[0]) > level * np.abs(np.array(list_models[0]))
+        significant_model_2 = np.abs(list_model_updates[1]) > level * np.abs(np.array(list_models[1]))
         significant = significant_model_1 | significant_model_2
     elif difference == "absolute":
         significant = np.abs(list_model_updates[1]-list_model_updates[0]) > level
