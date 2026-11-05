@@ -265,7 +265,7 @@ class physics_and_data_petrophysical:
         petro_transformation_gradient = petro_transformation.derivative_forward(
             petrophysical_model.model[region_of_interest_ids]
             )
-        model_transformation_gradient = petrophysical_model.transformed_model_gradient[region_of_interest_ids]
+        model_transformation_gradient = petrophysical_model.transformed_model_gradient
 
         # Finalise the Jacobian and response
         if domain == "default":

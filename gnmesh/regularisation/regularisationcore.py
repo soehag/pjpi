@@ -373,7 +373,7 @@ class RegularisationMultiModel:
         if domain == "default":
             return jacobian
         else:
-            model_inversion_transformation = [model_info.transformed_model_gradient[region_of_interest_ids] for model_info in model_info_list]
+            model_inversion_transformation = [model_info.transformed_model_gradient for model_info in model_info_list]
             model_inversion_transformation = np.array(model_inversion_transformation).flatten()
             return jacobian.multiply(model_inversion_transformation)
 

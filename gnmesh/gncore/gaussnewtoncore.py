@@ -187,7 +187,7 @@ class GaussNewtonCore:
                 "Maximum update per step must have the same length as the number of models."
             )
             for val in value:
-                assert isinstance(val, tuple), "Maximum update per step must be a tuple."
+                assert isinstance(val, (list, tuple)), "Maximum update per step must be a list or tuple."
                 assert len(val) == 2, "Maximum update per step must have two values."
                 assert all(isinstance(v, (int, float)) for v in val), (
                     "Maximum update per step must be a list of integers or floats."
